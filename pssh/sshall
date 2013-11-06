@@ -1,0 +1,8 @@
+#!/bin/bash
+
+ENV=${ENV:-all}
+cmd="pssh -i -l root -h ${PWD}/${ENV}.hosts -O CheckHostIP=no -O UserKnownHostsFile=${PWD}/known_hosts"
+
+set -e
+set -x
+$cmd $@

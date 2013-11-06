@@ -1,0 +1,67 @@
+Helps with running pssh against our infrastructure.
+
+Prerequisites
+=============
+git clone http://code.google.com/p/parallel-ssh/
+cd parallel-ssh
+sudo python setup.py install
+
+ssh-add
+ssh-keyscan -f hosts.txt >> ~/.ssh/known_hosts
+
+Update
+======
+./gen-hosts.rb
+
+Run after every change to systems.yml.
+Generates *.hosts files.
+
+Cookbook
+=======
+Check working:
+
+    ./sshall hostname
+    ENV=dev ./sshall hostname
+    ENV=test ./sshall  hostname
+    ENV=live ./sshall  hostname
+    ENV=project1 ./sshall  hostname
+
+Stop puppet:
+
+    ./sshall /etc/init.d/puppet stop
+    ./sshall killall puppet
+    ssh root@manage01.lonrs.manage.example.org /etc/init.d/puppetmaster start
+
+Run puppet immediately:
+
+    ssh root@manage01.lonrs.manage.example.org 'cd /etc/sys; git pull'
+    ./sshall -p 4 -t 300 puppet agent -t
+
+ -p limits concurrency so puppet master does not fall over
+ -t sets timeout to 300 seconds
+ exit code 2 means there were changes but no errors
+     (see http://docs.puppetlabs.com/man/agent.html)
+
+Restart apache, tomcat and syslog:
+
+    ./sshall /etc/init.d/apache2 restart
+    ./sshall /etc/init.d/tomcat7 restart
+    ./sshall /etc/init.d/rsyslog restart
+
+Upgrade ubuntu:
+
+    ./sshall apt-get -y -m -q dist-upgrade
+
+Restart nagios:
+
+    ssh root@monitor01.lonrs.manage.example.org /etc/init.d/nagios3 restart
+    
+ (useful after big changes/upgrades to re-check everything)
+
+Check what certs are there:
+
+    ./sshall ls -1 /etc/ssl/*.pem
+
+Check what OS version machines are on:
+
+    ./sshall 'cat /etc/lsb-release | grep DISTRIB_DESCRIPTION | sed -e "s/DISTRIB_DESCRIPTION=//g" -e "s/\"//g"'
