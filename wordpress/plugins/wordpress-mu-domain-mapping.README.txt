@@ -1,0 +1,13 @@
+Version 0.5.4.2 from http://wordpress.org/extend/plugins/wordpress-mu-domain-mapping/installation/
+
+Installed to allow any site on wordpress to get a custom domain name.
+
+Has some explicit custom settings in puppet to install sunrise.php.
+
+Configure the domain to point at the right site from the network admin.
+
+Add a CNAME from <yourdomainname> to wp.example.org. to get the site served.
+
+Note *.example.com is already CNAMED. So if you want to point foo.example.com to foo.wp.example.org, you don't need to touch the DNS.
+
+You can edit systems.yml to set ServerAlias to even more completely hide where the site is hosted.

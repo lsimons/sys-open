@@ -1,0 +1,7 @@
+Version 0.6 from http://wordpress.org/extend/plugins/wordpress-importer/installation/
+
+Installed to allow exported wordpress blogs to be imported here.
+
+Available for all sites.
+
+Will be used for migrating existing sites here.

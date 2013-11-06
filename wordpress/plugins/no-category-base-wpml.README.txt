@@ -1,0 +1,3 @@
+Version 1.1.0 from http://wordpress.org/extend/plugins/no-category-base-wpml/installation/
+
+Installed because some of our sites want category-less URLs.

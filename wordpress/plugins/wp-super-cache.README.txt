@@ -1,0 +1,9 @@
+Version 1.1 from http://wordpress.org/extend/plugins/wp-super-cache/installation/
+
+Installed for performance and reduced latency.
+
+Installed network wide.
+
+Configured to use php-based caching since it is a little simple to configure.
+
+Has some explicit custom settings in puppet to set up a cache directory and provide the cache config.

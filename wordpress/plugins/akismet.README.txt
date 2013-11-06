@@ -1,0 +1,5 @@
+Version 2.5.6 from http://wordpress.org/extend/plugins/akismet/installation/
+
+Installed because we want to make sure that any site that enables comments in the future gets spam protection.
+
+Not used on any site currently, but should be used wherever we allow input.
