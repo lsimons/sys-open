@@ -1,0 +1,47 @@
+SetEnv POOTLE_SETTINGS <%= app_current %>/pootle.conf
+
+# Point to the WSGI loader script.
+WSGIScriptAlias / <%= app_current %>/pootle_wsgi.py
+
+# Turn off directory listing by default.
+Options -Indexes
+
+# Set expiration for some types of files.
+# This might require enabling the 'expires' module.
+# ExpiresActive On
+# 
+# ExpiresByType image/jpg "access plus 2 hours"
+# ExpiresByType image/png "access plus 2 hours"
+# 
+# ExpiresByType text/css "access plus 10 years"
+# ExpiresByType application/x-javascript "access plus 10 years"
+
+# Optimal caching by proxies.
+# This might require enabling the 'headers' module.
+# Header set Cache-Control "public"
+
+# Directly serve static files like css and images, no need to go
+# through mod_wsgi and Django. For high performance consider having a
+# separate server.
+Alias /assets <%= app_venv %>/lib/<%= python_dir %>/site-packages/pootle/assets
+<Directory <%= app_venv %>/lib/<%= python_dir %>/site-packages/pootle/assets>
+    Order deny,allow
+    Allow from all
+</Directory>
+
+# Allow downloading translation files directly.
+# This location must be the same in the Pootle 'PODIRECTORY' setting.
+Alias /export <%= app_po %>
+<Directory <%= app_po %>>
+    Order deny,allow
+    Allow from all
+</Directory>
+
+<Location /export>
+    # Compress before being sent to the client over the network.
+    # This might require enabling the 'deflate' module.
+    SetOutputFilter DEFLATE
+
+    # Enable directory listing.
+    Options Indexes
+</Location>
