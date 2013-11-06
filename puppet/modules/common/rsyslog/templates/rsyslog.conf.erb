@@ -1,0 +1,260 @@
+# PUPPET
+
+# client config for rsyslog that sends all logs reliably to
+# the logging server and does almost no local logging
+
+######################
+#### LOAD MODULES ####
+######################
+
+# provides support for local system logging
+$ModLoad imuxsock
+
+# provides kernel logging support (previously done by rklogd)
+$ModLoad imklog
+
+# provides --MARK-- message capability
+#$ModLoad immark
+
+# provides UDP syslog reception
+$ModLoad imudp
+$UDPServerRun 514
+
+# provides TCP syslog reception
+$ModLoad imtcp
+
+# loads module to send config to the logged-on user
+# $ModLoad omusrmsg
+
+
+########################
+### Global settings ####
+########################
+
+# Do not filter duplicated messages to allow for access logging
+#$RepeatedMsgReduction on
+$RepeatedMsgReduction off
+
+# Set the default permissions for all log files.
+$FileOwner syslog
+$FileGroup adm
+$FileCreateMode 0640
+$DirCreateMode 0755
+$Umask 0022
+$PrivDropToUser syslog
+$PrivDropToGroup syslog
+
+# prepare for the fact that things can be pretty noisy
+$SystemLogRateLimitInterval 1
+$SystemLogRateLimitBurst 1000
+
+# java stack traces have tabs. rsyslog normally turns these into #011
+# escapes. This is ugly. There is no good option to allow tabs but not
+# other characters, so let's allow all of them.
+$EscapeControlCharactersOnReceive off
+
+
+####################################
+### Confused? Turn on debugging ####
+####################################
+#*.* -/var/log/debug
+
+###########################
+### Some local logging ####
+###########################
+# http://www.rsyslog.com/doc/rsyslog_conf_actions.html
+
+$RepeatedMsgReduction on
+
+#         To ensure that kernel messages are written to disk promptly,
+#         syslogd(8) calls fsync(2) after writing messages from the kernel.
+#         Other messages are not synced explcitly.  You may disable syncing of
+#         files specified to receive kernel messages by prefixing the pathname
+#         with a minus sign `-'.  Note that use of this option may cause the
+#         loss of log information in the event of a system crash immediately
+#         following the write attempt.  However, using this option may prove to
+#         be useful if your system's kernel is logging many messages.
+
+# puppet logs can contain diffs which can contain certificates.
+# Since it is hard to match on these diffs, do not log anything!
+<% if puppet['enable_logging'] != 1 %>
+:programname,    isequal,    "puppet-agent"   ~
+<% end %>
+
+# Log emergencies to all logged-on users
+*.emerg                                       :omusrmsg:*
+
+
+# Log UFW messages only to ufw.log, do not forward
+:msg,          contains,   "[UFW "            /var/log/ufw.log
+& ~
+
+# Log certain relatively load/unimportant messages locally and do not forward
+:programname,  isequal,    "dhclient"         /var/log/syslog
+& ~
+
+:programname,  isequal,    "rsyslogd"         /var/log/syslog
+& ~
+
+:programname,  isequal,    "snmpd"            /var/log/syslog
+& ~
+
+# Log important messages locally and also forward
+#     (note that on the loghost, these rules also match, so
+#     auth.log and kern.log have info from client hosts, too)
+auth,authpriv.*                               /var/log/auth.log
+kern.*                                        -/var/log/kern.log
+
+
+###################################
+#### Apache/tomcat/app logging ####
+###################################
+
+# Don't dedupe request logs
+$RepeatedMsgReduction off
+
+<%
+  if profile == "loghost"
+    lastrule = "& ~"
+  else
+    lastrule = ""
+  end
+%>
+
+<% if profile == "loghost" || apache['enable_logging'] == 1 %>
+# apache logs will also be kept on local machines for debugging convenience
+
+$template webaccess,"/var/log/rsyslog/%HOSTNAME%/%$now%_access.log"
+$template weberror,"/var/log/rsyslog/%HOSTNAME%/%$now%_error.log"
+
+local2.*                                       ?webaccess
+<%= lastrule %>
+
+local3.*                                       ?weberror
+local3.*                                       ?webaccess
+<%= lastrule %>
+<% end %>
+
+<% if profile == "loghost" || tomcat['enable_logging'] == 1 %>
+# tomcat logs will also be kept on local machines for debugging convenience
+
+$template app,"/var/log/rsyslog/%HOSTNAME%/%$now%_app.log"
+
+local4.*                                       ?webaccess
+<%= lastrule %>
+
+local5.*                                       ?app
+<%= lastrule %>
+<% end %>
+
+<% if profile == "loghost" %>
+
+#################################
+#### Configure log receiving ####
+#################################
+$DefaultNetstreamDriver gtls
+$DefaultNetstreamDriverCAFile /usr/share/ca-certificates/local/ca.pem
+$DefaultNetstreamDriverCertFile /etc/ssl/<%= fqdn %>_cert.pem
+$DefaultNetstreamDriverKeyFile /etc/ssl/<%= fqdn %>_key.pem
+#$InputTCPServerStreamDriverAuthMode anon # client is NOT authenticated
+#$InputTCPServerStreamDriverAuthMode x509/certvalid
+#$InputTCPServerStreamDriverAuthMode x509/name
+$InputTCPServerStreamDriverAuthMode <%= rsyslog["client_cert_validation"] %>
+
+<% if rsyslog["client_cert_validation"] == "x509/name" %>
+# No. *.example.org is not a valid option.
+# (It is also not what we want.)
+# One line per allowed host:
+#$InputTCPServerStreamDriverPermittedPeer manage01.lonrs.manage.example.org
+#$InputTCPServerStreamDriverPermittedPeer mail01.lonrs.manage.example.org
+#$InputTCPServerStreamDriverPermittedPeer log01.lonrs.manage.example.org
+<% rsyslog_clients.each do |client| %>
+$InputTCPServerStreamDriverPermittedPeer <%= client %>
+<% end %>
+<% end %>
+
+$InputTCPServerStreamDriverMode 1
+# What? Port 10514? That's not standard! Nope. It's a bug. 
+# https://bugs.launchpad.net/ubuntu/+source/rsyslog/+bug/789174
+$InputTCPServerRun 10514
+
+#################################################
+#### Write logs into a per-server dated file ####
+#################################################
+
+$RepeatedMsgReduction on
+$template puppet,"/var/log/rsyslog/%HOSTNAME%/%$now%_puppet.log"
+:programname,    isequal,    "puppet-agent"   ?puppet
+& ~
+
+# log all remaining messages
+$RepeatedMsgReduction on
+$template default,"/var/log/rsyslog/%HOSTNAME%/%$now%_sys.log"
+*.*                                           ?default
+
+<% else %>
+##################################
+#### Configure log forwarding ####
+##################################
+# see http://www.rsyslog.com/doc/rsyslog_secure_tls.html
+
+$DefaultNetstreamDriver gtls # use gtls netstream driver
+$DefaultNetstreamDriverCAFile /usr/share/ca-certificates/local/ca.pem
+$DefaultNetstreamDriverCertFile /etc/ssl/<%= fqdn %>_cert.pem
+$DefaultNetstreamDriverKeyFile /etc/ssl/<%= fqdn %>_key.pem
+
+# set up the action
+#$ActionSendStreamDriverAuthMode anon # server is NOT authenticated
+#$ActionSendStreamDriverAuthMode x509/certvalid
+#$ActionSendStreamDriverAuthMode x509/name
+$ActionSendStreamDriverAuthMode <%= rsyslog["client_cert_validation"] %>
+<% if rsyslog["client_cert_validation"] == "x509/name" %>
+$ActionSendStreamDriverPermittedPeer <%= loghost %>
+<% end %>
+$ActionSendStreamDriverMode 1 # require TLS for the connection
+
+
+############################################################
+### Configure log queueing for more reliable forwarding ####
+############################################################
+# see http://www.rsyslog.com/doc/rsyslog_reliable_forwarding.html
+
+# Where to place spool files
+$WorkDirectory /var/spool/rsyslog
+
+# use asynchronous processing
+$ActionQueueType LinkedList
+
+# set file name, also enables disk mode
+$ActionQueueFileName srvrfwd
+
+# infinite retries on insert failure
+$ActionResumeRetryCount -1
+
+# save in-memory data if rsyslog shuts down
+$ActionQueueSaveOnShutdown on 
+
+# forward (all) messages
+#     see http://www.rsyslog.com/doc/rsyslog_conf_actions.html:
+#       *.* selects all messages
+#       @@  means TCP
+#       (o) uses different message framing
+#       server:port specifies the destination
+*.* @@(o)<%= loghost %>:10514
+
+<% if rsyslog['local_log'] == 1 %>
+# log everything locally
+$RepeatedMsgReduction on
+$template default,"/var/log/syslog"
+*.*                                           ?default
+<% end %>
+
+<% end %>
+
+
+#################
+### Includes ####
+#################
+
+# Do _not_ include the config files in /etc/rsyslog.d/
+# $IncludeConfig /etc/rsyslog.d/*.conf

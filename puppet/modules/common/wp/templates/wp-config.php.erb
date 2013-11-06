@@ -1,0 +1,55 @@
+<?php
+
+// This file is managed by puppet. Do not edit.
+
+define('DB_NAME', '<%= wpdb['DB_DATA'] %>');
+define('DB_USER', '<%= wpdb['DB_USER'] %>');
+define('DB_PASSWORD', '<%= wpdb['DB_PASSWD'] %>');
+define('DB_HOST', '<%= wpdb['DB_HOST'] %>');
+
+define('DB_CHARSET', 'utf8');
+define('DB_COLLATE', '');
+
+define('AUTH_KEY',         '{G_!K)m*9Y7^8EW La.g^xR1PCJ8ko5[ A5_L%=-U_4K_M*1 +j,:PyThN|0h2BX');
+define('SECURE_AUTH_KEY',  'Ji70OQ%!zL:})uu|Y0(ILi;,{FieHIwiTtI{`W`<Krrv!E|R]e~Dn,0#X=_$Iixt');
+define('LOGGED_IN_KEY',    'D+k?+jkTk,[4RObj,t}XbK(U<+Q(bas,]9q1Xj{H%ke/*7@9<D1W(;1_;Wx47z)+');
+define('NONCE_KEY',        'OeZ(GqN3%$D/.fwD){KV}vH=)A<KrWgzF09q:P3B/-=uaTi$--m1.Qu@W!M}P[J@');
+define('AUTH_SALT',        ' 7R,9;ez!*+QX-,c1=Ge75Gn2KoA0Z`Oxng0B9}Yp2|+!c)m~Q`04e^/7$90jEYR');
+define('SECURE_AUTH_SALT', '*AF4-iAmHb-NG1T!SSC!<? =-{;(?.c8<3Ygq?4Xww=NQx@i6x1wQ0ak^+(@?cnP');
+define('LOGGED_IN_SALT',   '*.05>Bj}`B[|7<{ 3F!bZT^p.<-rS@1(t9iD]s+bilu0AU,<rc#E[N;/t@D0+J)O');
+define('NONCE_SALT',       ':~wP5b`|p1 W+dx1rm_Y-Z.ynA=*9?z4t!.-nFv-z-J-*hq,WW}NE|N@4&w78Ud/');
+define('NOBLOGREDIRECT',   'http://www.old.example.com/');
+
+$table_prefix  = 'wp_';
+
+define('WPLANG', 'en_EN');
+
+define('WP_DEBUG', false);
+# define('WP_DEBUG', true);
+# define('WP_DEBUG_DISPLAY', true);
+# define('WP_DEBUG_LOG', true);
+
+# http://codex.wordpress.org/Create_A_Network#Step_4:_Enabling_the_Network
+define('WP_ALLOW_MULTISITE', true);
+
+define('MULTISITE', true);
+define('SUBDOMAIN_INSTALL', true);
+$base = '/';
+define('DOMAIN_CURRENT_SITE', 'wp.example.org');
+define('PATH_CURRENT_SITE', '/');
+define('SITE_ID_CURRENT_SITE', 1);
+define('BLOG_ID_CURRENT_SITE', 1);
+
+# http://wordpress.org/extend/plugins/wordpress-mu-domain-mapping/installation/
+define( 'SUNRISE', 'on' );
+
+# http://codex.wordpress.org/Administration_Over_SSL
+define('FORCE_SSL_ADMIN', true);
+
+# supercache does not play well with qtranslate :-(
+# define('WP_CACHE', true);
+
+if ( !defined('ABSPATH') )
+    define('ABSPATH', dirname(__FILE__) . '/www/current/public/');
+
+require_once(ABSPATH . 'wp-settings.php');

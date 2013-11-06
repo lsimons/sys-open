@@ -1,0 +1,17 @@
+# PUPPET
+# http://tomcat.apache.org/tomcat-7.0-doc/logging.html
+
+# tomcat is not using java.util.logging but is instead using log4j. this
+# file is just here as a fallback handler for webapps that use
+# java.util.logging but do not configure it. This just logs to the console,
+# which would normally be 'catalina.out', but is also, in fact, redirected
+# to syslog
+
+handlers = java.util.logging.ConsoleHandler
+
+.handlers = java.util.logging.ConsoleHandler
+
+.level = INFO
+
+java.util.logging.ConsoleHandler.level = INFO
+java.util.logging.ConsoleHandler.formatter = org.apache.juli.OneLineFormatter

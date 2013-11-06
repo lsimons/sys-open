@@ -1,0 +1,14 @@
+<% if @apache['http_active'] == 1 %>
+NameVirtualHost <%= @apache['http_listener'] %>
+Listen 80
+<% end %>
+<% if @apache['http_alt_active'] == 1 %>
+NameVirtualHost <%= @apache['http_alt_listener'] %>
+Listen 8080
+<% end %>
+<% if @apache['https_active'] == 1 %>
+<IfModule mod_ssl.c>
+    NameVirtualHost <%= @apache['https_listener'] %>
+    Listen 443
+</IfModule>
+<% end %>

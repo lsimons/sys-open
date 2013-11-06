@@ -1,0 +1,42 @@
+# PUPPET
+[mysqld]
+max_connections      = <%= mysql['max_connections'] %>
+connect_timeout      = 10
+
+default_storage_engine = INNODB
+
+# THIS BREAKS UBUNTU 12.04!
+# default_character_set  = utf8
+# As of mysql 5.5.3 it is this:
+character_set_server = utf8 
+
+
+max_allowed_packet   = <%= mysql['max_allowed_packet'] %>M
+table_cache          = <%= mysql['table_cache'] %>
+sort_buffer_size     = 1M
+read_buffer_size     = 1M
+read_rnd_buffer_size = 4M
+
+thread_cache_size    = 4
+
+key_buffer_size                 = <%= mysql['key_buffer_size'] %>M
+query_cache_size                = <%= mysql['query_cache_size'] %>M
+innodb_buffer_pool_size         = <%= mysql['innodb_buffer_pool_size'] %>M
+innodb_additional_mem_pool_size = 20M
+
+# setting this makes for a hassle as we figure out how to puppetize removing the innodb files when we change it...
+#innodb_log_file_size            = 32M
+
+innodb_log_buffer_size          = 8M
+innodb_lock_wait_timeout        = 50
+innodb_support_xa               = 1
+innodb_flush_log_at_trx_commit  = 1
+innodb_file_per_table
+
+# bind to all interfaces...but we are normally firewalled off
+bind-address = 0.0.0.0
+
+[mysql]
+prompt = "\\u@\\d>\_"
+default_character_set  = utf8
+

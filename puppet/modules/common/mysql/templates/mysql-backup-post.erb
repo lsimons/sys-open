@@ -1,0 +1,3 @@
+#!/bin/bash
+
+find <%= backup['mysql_backup_dir'] %> -type f -mtime <%= backup['mysql_backup_window'] %> -exec rm {} \;

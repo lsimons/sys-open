@@ -1,0 +1,297 @@
+# PUPPET
+<%-
+    def allow(root, multiViews=false)
+      # multiviews needs to be explicitly false for rack apps...
+      # http://www.modrails.com/documentation/Users%20guide%20Apache.html#deploying_rack_to_sub_uri
+      if multiViews
+        multiViews = "MultiViews"
+      else
+        multiViews = "-MultiViews"
+      end
+      return <<-EOS
+        <Directory "#{root}">
+            Options           Indexes FollowSymLinks #{multiViews}
+            AllowOverride     None
+            Order             allow,deny
+            allow             from all
+        </Directory>
+      EOS
+    end
+
+    def docroot(root, multiViews=false)
+      result = <<-EOS
+        DocumentRoot          "#{root}"
+      EOS
+      result += allow(root, multiViews=multiViews)
+    end
+
+    def ssl(apache)
+      rules = ""
+      apache['ssl_location_directives'].each do |rule|
+        rules += "          " + rule + "\n"
+      end
+      verifyClient = apache['SSLVerifyClient']
+      if verifyClient == nil
+        verifyClient = "none"
+      end
+
+      return <<-EOS
+        SSLEngine on
+        SSLOptions            +StdEnvVars
+        <Location />
+          SSLRequire          %{SSL_CIPHER_USEKEYSIZE} >= 128
+#{rules}
+        </Location>
+
+        BrowserMatch          "MSIE [2-6]" \\
+            nokeepalive ssl-unclean-shutdown \\
+            downgrade-1.0 force-response-1.0
+        BrowserMatch          "MSIE [17-9]" \\
+            ssl-unclean-shutdown
+
+        # allow clients to provide an SSL certificate, and set headers
+        #   based on that certificate if provided
+        SSLVerifyClient       #{verifyClient}
+        SSLVerifyDepth        2
+        RequestHeader set SSL_CLIENT_S_DN "%{SSL_CLIENT_S_DN}s"
+        RequestHeader set SSL_CLIENT_S_DN_CN "%{SSL_CLIENT_S_DN_CN}s"
+        RequestHeader set SSL_CLIENT_I_DN "%{SSL_CLIENT_I_DN}s"
+        RequestHeader set SSL_CLIENT_I_DN_CN "%{SSL_CLIENT_I_DN_CN}s"
+
+        # try to set X-Originating-System-Id based on client certificate, if no other value has been provided
+        SetEnvIf X-Originating-System-Id ".+" know_system_id
+        RequestHeader set X-Originating-System-Id "%{SSL_CLIENT_S_DN_CN}e"  env=!know_system_id
+      EOS
+    end
+
+    def is_true?(var)
+      # default (nil) interpreted as true
+      return [nil, 1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+    def is_strictly_true?(var)
+      # default (nil) interpreted as false
+      return [1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+    
+    http_redirect_to_ssl = is_strictly_true?(@apache['http_redirect_to_ssl'])
+    is_http_active       = is_true?(@apache['http_active'])
+    is_http_alt_active   = is_true?(@apache['http_alt_active'])
+    is_https_active      = is_true?(@apache['https_active'])
+    
+    apps = []
+    @passenger_apps.each do |app|
+      app["is_passenger"] = true
+      app["is_php"] = false
+      app["is_wsgi"] = false
+      apps.push(app)
+    end
+    @php_apps.each do |app|
+      app["is_passenger"] = false
+      app["is_php"] = true
+      app["is_wsgi"] = false
+      apps.push(app)
+    end
+    @wsgi_apps.each do |app|
+      app["is_passenger"] = false
+      app["is_php"] = false
+      app["is_wsgi"] = true
+      apps.push(app)
+    end
+    
+    apps.each do |app|
+      app_fqdn                  = "#{app['AppName']}.#{@env}.#{@domain}"
+      app["is_http_active"]     = (is_http_active     && is_true?(app['http_active']))
+      app["is_http_alt_active"] = (is_http_alt_active && is_strictly_true?(app['http_alt_active']))
+      app["is_https_active"]    = (is_https_active    && is_true?(app['https_active']))
+      app["fqdn"]               = app_fqdn
+      app["app_root"]           = "/home/#{app['User']}/#{app['AppName']}/current"
+      app["DocumentRoot"]       = "#{app['app_root']}/public"
+      app["http_redirect_to_ssl"] = http_redirect_to_ssl || is_strictly_true?(app['http_redirect_to_ssl'])
+      app["support_non_virtual"] = is_strictly_true?(app['support_non_virtual'])
+      
+      app_has_cert = false
+      if app.has_key?('ssl')
+        app_ssl = app['ssl']
+        if app_ssl.has_key?(@env)
+          app_has_cert = true
+        end
+      end
+      if !app_has_cert && app.has_key?('serials')
+        serials = app['serials']
+        if serials.has_key?(@env)
+          app_has_cert = true
+          app['ssl'] = {}
+          app['ssl'][@env] = {
+            "cert_file" => "/etc/ssl/#{app_fqdn}_cert.pem",
+            "key_file"  => "/etc/ssl/#{app_fqdn}_key.pem",
+            "ca_file"   => "/usr/share/ca-certificates/local/ca.pem"
+          }
+        end
+      end
+
+      if app["is_https_active"] && !app_has_cert
+        raise "Missing serial for secure app #{app['AppName']} in environment #{@env}"
+      end
+    end
+-%>
+    ## <global>
+        ServerAdmin           <%= @apache['ServerAdmin'] %>
+
+        <Directory />
+            Options           FollowSymLinks -MultiViews
+            AllowOverride     None
+        </Directory>
+
+<%= docroot(@apache['DocumentRoot']) %>
+    ## </global>
+
+
+# non-app-specific virtual hosting for the server itself
+#  this has to be first, so non-SNI SSL connects to the main vhost
+<%- if is_http_active -%>
+    <VirtualHost <%= @apache['http_listener'] %>>
+        ServerName            <%= @apache['ServerName'] %>
+        ServerAlias           <%= @env %>.<%= @domain %>
+        
+        <%- apps.each do |app| -%>
+          <%- if app["http_redirect_to_ssl"] -%>
+        Redirect              /<%= app['AppName'] %> https://<%= @apache['ServerName'] %>/<%= app['AppName'] %>
+          <%- else -%>
+        Redirect              /<%= app['AppName'] %> http://<%= app['fqdn'] %>/
+          <%- end -%>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+<%- if is_http_alt_active -%>
+    <VirtualHost <%= @apache['http_listener'] %>>
+        ServerName            <%= @apache['ServerName'] %>:8080
+        ServerAlias           <%= @env %>.<%= @domain %>
+        
+        # redirect to name-based virtual hosting
+        <%- apps.each do |app| -%>
+          <%- if app["http_redirect_to_ssl"] -%>
+            Redirect          /<%= app['AppName'] %> https://<%= @apache['ServerName'] %>/<%= app['AppName'] %>
+          <%- else -%>
+            Redirect          /<%= app['AppName'] %> http://<%= app['fqdn'] %>/
+          <%- end -%>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+<%- if is_https_active -%>
+    <VirtualHost <%= @apache['https_listener'] %>>
+        ServerName            <%= @clientcert %>
+        ServerAlias           <%= @apache['ServerName'] %>
+
+<%= ssl(@apache) %>
+        <%- if @apache['SSLCertificateFile'] != nil -%>
+        SSLCertificateFile    <%= @apache['SSLCertificateFile'] %>
+        <%- else -%>
+        SSLCertificateFile    /etc/ssl/<%= @clientcert %>_cert.pem
+        <%- end -%>
+        <%- if @apache['SSLCertificateKeyFile'] != nil -%>
+        SSLCertificateKeyFile <%= @apache['SSLCertificateKeyFile'] %>
+        <%- else -%>
+        SSLCertificateKeyFile /etc/ssl/<%= @clientcert %>_key.pem
+        <%- end -%>
+        SSLCACertificateFile  /usr/share/ca-certificates/local/ca.pem
+<%= docroot(@apache['DocumentRoot']) %>
+        <%- apps.each do |app| -%>
+          <%- if app["is_https_active"] -%>
+            <%- if app['support_non_virtual'] -%>
+<%= allow(app["DocumentRoot"]) %>
+        Include apps/<%= app['AppName'] %>-vhost-customization.conf
+              <%- if app["is_passenger"] -%>
+        RackBaseURI /<%= app['AppName'] %>
+        <Location /<%= app['AppName'] %>>
+        PassengerAppRoot <%= app['app_root'] %>
+        </Location>
+              <%- end -%>
+              <%- if app["is_php"] -%>
+        PassengerEnabled off
+              <%- end -%>
+              <%- if app["is_wsgi"] -%>
+        WSGIDaemonProcess ssl.<%= @apache['ServerName'] %> <%= app['WSGIDaemonProcessOptions'] %>
+        WSGIProcessGroup ssl.<%= @apache['ServerName'] %>
+        PassengerEnabled off
+              <%- end -%>
+            <%- else -%>
+        Redirect /<%= app['AppName'] %> https://<%= app['fqdn'] %>/
+            <%- end -%>
+          <%- end -%>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+
+# name-based virtual hosting for apps
+<%- apps.each do |app| -%>
+  <%- if app["is_http_active"] -%>
+    <VirtualHost <%= @apache['http_listener'] %>>
+        Include apps/<%= app['AppName'] %>-vhost-customization.conf
+        ServerName <%= app['fqdn'] %>
+
+        <%- if app["http_redirect_to_ssl"] -%>
+        Redirect / https://<%= app['fqdn'] %>/
+        <%- else -%>
+        <%- if app["is_php"] -%>
+        RewriteEngine on
+        RewriteRule ^/<%= app['AppName'] %>(.*)$ /$1
+        PassengerEnabled off
+        <%- end -%>
+        <%- if app["is_wsgi"] -%>
+        WSGIDaemonProcess <%= app['fqdn'] %> <%= app['WSGIDaemonProcessOptions'] %>
+        WSGIProcessGroup <%= app['fqdn'] %>
+        PassengerEnabled off
+        <%- end -%>
+        <%- end -%>
+<%= docroot(app['DocumentRoot']) %>
+    </VirtualHost>
+  <%- end -%>
+  <%- if app["is_http_alt_active"] -%>
+    <VirtualHost <%= @apache['http_alt_listener'] %>>
+        Include apps/<%= app['AppName'] %>-vhost-customization.conf
+        ServerName <%= app['fqdn'] %>:8080
+
+        <%- if app["http_redirect_to_ssl"] -%>
+        Redirect / https://<%= app['fqdn'] %>/
+        <%- else -%>
+        <%- if app["is_php"] -%>
+        RewriteEngine on
+        RewriteRule ^/<%= app['AppName'] %>(.*)$ /$1
+        PassengerEnabled off
+        <%- end -%>
+        <%- if app["is_wsgi"] -%>
+        WSGIDaemonProcess http_alt.<%= app['fqdn'] %> <%= app['WSGIDaemonProcessOptions'] %>
+        WSGIProcessGroup http_alt.<%= app['fqdn'] %>
+        PassengerEnabled off
+        <%- end -%>
+        <%- end -%>
+<%= docroot(app['DocumentRoot']) %>
+    </VirtualHost>
+  <%- end -%>
+  <%- if app["is_https_active"] -%>
+    <VirtualHost <%= @apache['https_listener'] %>>
+        Include apps/<%= app['AppName'] %>-vhost-customization.conf
+        ServerName            <%= app['fqdn'] %>
+
+<%= ssl(apache) %>
+        SSLCertificateFile    <%= app['ssl'][env]['cert_file'] %>
+        SSLCertificateKeyFile <%= app['ssl'][env]['key_file'] %>
+        SSLCACertificateFile  <%= app['ssl'][env]['ca_file'] %>
+<%= docroot(app['DocumentRoot']) %>
+        <%- if app["is_php"] -%>
+        RewriteEngine on
+        RewriteRule ^/<%= app['AppName'] %>(.*)$ /$1
+        PassengerEnabled off
+        <%- end -%>
+        <%- if app["is_wsgi"] -%>
+        WSGIDaemonProcess https.<%= app['fqdn'] %> <%= app['WSGIDaemonProcessOptions'] %>
+        WSGIProcessGroup https.<%= app['fqdn'] %>
+        PassengerEnabled off
+        <%- end -%>
+    </VirtualHost>
+  <%- end -%>
+
+<%- end -%>

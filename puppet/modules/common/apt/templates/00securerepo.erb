@@ -1,0 +1,16 @@
+# PUPPET
+Acquire::https::Verify-Peer "true";
+Acquire::https::Verify-Host "true";
+
+<% if apache['SSLCACertificateFile'] != nil %>
+Acquire::https::CaInfo  "<%= apache['SSLCACertificateFile'] %>";
+<% else %>
+Acquire::https::CaInfo  "/usr/share/ca-certificates/local/ca.pem";
+<% end %>
+
+# unfortunately this does not work:
+#   http://www.mail-archive.com/debian-user@lists.debian.org/msg602593.html
+# Acquire::https::SslCert "/etc/ssl/<%= clientcert %>_cert.pem";
+# Acquire::https::SslKey  "/etc/ssl/<%= clientcert %>_key.pem";
+
+# Debug::Acquire::https "true";

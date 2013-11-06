@@ -1,0 +1,68 @@
+#!/bin/bash
+# PUPPET 
+
+if [ $# -ne 3 ] ; then
+  echo "Checks memory usage. Usage: $0 <hostname> <warn> <crit>"
+  echo ""
+  echo "    hostname: the host you aim to poll."
+  echo "    warn    : at what percentage of memory usage should nagios give warning?"  
+  echo "    crit    : at what percentage of memory usage should nagios call you at home?"
+  echo ""
+  echo "Example: $0 bigapeinc.com 80 95"
+  exit ${STATUS_UNKNONW}
+fi
+
+TARGET="$1"
+WARN="$2"
+CRIT="$3"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+# true_used_memory =  total - cached - buffers
+# true_free_memory = total - true_used_memory
+#     -http://rimuhosting.com/howto/memory.jsp
+#
+# Seems ligit!
+
+# Since SNMP does not output sane memory details, I wrote a tiny extention that
+# calls 'free'. It can be reached here:
+# NET-SNMP-EXTEND-MIB::nsExtendOutLine."true_mem".1
+
+RESULT="`snmpget -OvQ ${TARGET} 'NET-SNMP-EXTEND-MIB::nsExtendOutLine."true_mem".1'`"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+TOTAL=`echo ${RESULT}| cut -d ' ' -f 1`
+USED=`echo ${RESULT}| cut -d ' ' -f 2`
+FREE=`echo ${RESULT}| cut -d ' ' -f 3`
+SHARED=`echo ${RESULT}| cut -d ' ' -f 4`
+BUFFERS=`echo ${RESULT}| cut -d ' ' -f 5`
+CACHED=`echo ${RESULT}| cut -d ' ' -f 6`
+
+#echo $SNMP_RESULT
+let "TRUE_FREE = ${CACHED} + ${BUFFERS}"
+let "TRUE_FREE = ${TRUE_FREE} + ${FREE}"
+let "TRUE_USED = ${TOTAL} - ${TRUE_FREE}"
+#echo free: ${TRUE_FREE}
+#echo used: ${TRUE_USED}
+let "VERIFY = ${TRUE_FREE} + ${TRUE_USED}"
+#echo verify: $VERIFY
+PERCENTAGE=`echo "scale=2; (${TRUE_USED} / ${TOTAL}) * 100 " | bc| cut -d '.' -f 1`
+
+if [[ ${PERCENTAGE} -gt ${CRIT} ]]  ; then
+  echo "MEM CRITICAL: ${PERCENTAGE}% > ${CRIT}%"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [[ ${PERCENTAGE} -gt ${WARN} ]] ; then
+  echo "MEM WARNING: ${PERCENTAGE}% > ${WARN}%"
+  exit ${STATUS_WARNING}
+fi
+
+echo "MEM OK: ${PERCENTAGE}%"
+exit ${STATUS_OK}

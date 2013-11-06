@@ -1,0 +1,164 @@
+# This file contains per-machine configuration information.
+#
+# This information is loaded by puppet-node.rb which acts as our external node
+#     classifier.
+# It is _also_ loaded directly by some custom ruby-based puppet classes that need
+#    to know  the list of nodes.
+
+# Format:
+# ${machinename}.${datacenter}.${env}.${domain}:
+#    # the unique serial number for the machine. Used in the machine's SSL certificate
+#    serial: ${uniquemachineserial}
+#    # the profile from profiles.yml to apply to this machine. Determines its classes
+#    #   and may also be used in puppet modules to further customize configuration.
+#    profile: ${profile}
+#    # the environment from environments.yml that this machine belongs in. MUST match
+#    #   the environment specified in the machine FQDN or weird behavior results.
+#    env: ${env}
+#    # any and all configuration from apps.yml/environments.yml/profiles.yml can be
+#    #   overridden here
+#    ${anyotherconfig}
+
+# When machines are retired, they should be moved into the special 'deleted' env.
+#    Their serial number should be kept and not be reused for another machine. This
+#    is used to revoke their certificate.
+
+# --------------------------------
+#       Management Servers
+# --------------------------------
+
+manage01.lonrs.manage.example.org:
+    serial: 1000
+    profile: manage
+    env: live
+    masterserver: manage01.lonrs.manage.example.org
+    apache:
+        ServerName: ca.example.org
+        SSLCertificateFile: /etc/ssl/cert/star_example_org.crt
+        SSLCertificateKeyFile: /etc/ssl/cert/star_example_org.key
+        SSLCACertificateFile: /etc/ssl/cert/PositiveSSL-bundle.ca-bundle
+        http_redirect_to_ssl: 1
+
+log01.lonrs.manage.example.org: 
+    serial: 1012
+    profile: loghost
+    env: live
+
+monitor01.lonrs.manage.example.org: 
+    serial: 1013
+    profile: monitorhost
+    env: live
+    apache:
+        ServerName: monitor01.lonrs.manage.example.org
+        ServerAlias: monitoring.example.org
+
+mail01.lonrs.manage.example.org:
+    serial: 1001
+    profile: smarthost
+    env: live
+
+# ------------------------------
+#    Deleted machines:
+# ------------------------------
+svc04.lonrs.test.example.org: # INFRA-141, INFRA-143
+    serial: 1002
+    env: deleted
+
+# ------------------------------
+#    Hosting Machines:
+# ------------------------------
+
+svc10.lonrs.live.example.org:
+    serial: 1007
+    profile: wpdb
+    env: live
+
+svc11.lonrs.live.example.org:
+    serial: 1008
+    profile: wp
+    env: live
+    apache:
+        ServerName: wp.example.org
+        ServerAlias: '*.example.org *.old.example.org wp.old.example.org'
+        DocumentRoot: /home/wp/www/current/public
+        SSLCertificateFile: /etc/ssl/cert/star_example_org.crt
+        SSLCertificateKeyFile: /etc/ssl/cert/star_example_org.key
+        SSLCACertificateFile: /etc/ssl/cert/PositiveSSL-bundle.ca-bundle
+        mod_php: 1
+        enable_logging: 1
+        # INFRA-298
+        mod_dav: 1
+
+svc15.lonrs.dev.example.org:
+    serial: 1014
+    profile: webapp
+    env: dev
+    classes:
+        firewall:
+        slapd:
+        ldapdb:
+
+svc16.lonrs.test.example.org:
+    serial: 1015
+    profile: webapp
+    env: test
+
+svc18.lonrs.test.example.org:
+    serial: 1018
+    profile: www
+    env: test
+    apache:
+        ServerName: www.test.example.org
+    classes:
+        davical:
+
+# ------------------------------
+#    Local Testing:
+# ------------------------------
+
+manage01.local:
+    serial: 2
+    profile: manage
+    env: local
+    masterserver: manage01.local
+    apache:
+        ServerName: ca.local.local
+        SSLCertificateFile: /etc/ssl/ca.local.local_cert.pem
+        SSLCertificateKeyFile: /etc/ssl/ca.local.local_key.pem
+        ## disable SSLRequire for the CA!
+        SSLVerifyClient:         optional
+        ssl_location_directives: []
+        http_redirect_to_ssl: 1
+
+log01.local:
+    serial: 3
+    profile: loghost
+    env: local
+
+monitor01.local:
+    serial: 4
+    profile: monitorhost
+    env: local
+    apache:
+        # only allow SSL access
+        http_active: 0
+        http_alt_active: 0
+
+mail01.local:
+    serial: 5
+    profile: smarthost
+    env: local
+
+backup01.local: # INFRA-179
+    serial: 6
+    env: deleted
+
+svc02.local:
+    serial: 8
+    profile: webapp
+    env: local
+
+svc03.local:
+    serial: 9
+    profile: www
+    env: local

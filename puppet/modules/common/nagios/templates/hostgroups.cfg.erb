@@ -1,0 +1,21 @@
+#PUPPET
+# Some generic hostgroup definitions
+<% hostgroups = ["mailhost", "loghost", "http", "https", "httpalt", "munin", "puppetmaster", "management",]  %>
+
+<% for h in hostgroups %>
+define hostgroup {
+  hostgroup_name  <%= h %>
+}
+<% end %>
+
+
+# A simple wildcard hostgroup
+define hostgroup {
+  hostgroup_name  all
+  alias           All Servers
+  members         *
+}
+
+define hostgroup {
+  hostgroup_name  stuff
+}

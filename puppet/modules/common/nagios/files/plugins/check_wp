@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# This check an URL ($1) for the version of wordpress.
+
+# Verified against http://core.svn.wordpress.org/tags/ and
+# wordpress.org/download.
+
+URL=$1
+WP_VERSION="`curl -s ${URL} | grep generator | xargs | cut -d '=' -f 3 | cut -d ' ' -f 2`"
+WP_SVN_URL="http://core.svn.wordpress.org/tags/"
+WP_SVN_LATEST="`links -dump ${WP_SVN_URL} | grep \* | tail -n 1 | xargs | cut -d ' ' -f 2 | cut -d '/' -f 1`"
+WP_URL="http://wordpress.org/download/"
+WP_LATEST="`curl -s ${WP_URL} | grep 'download-button' | xargs | sed -e 's/.*WordPress\&nbsp\;//' -e 's/<\/strong.*//'`"
+
+EXITCODE="0"
+
+# If there is some difference between what the official website tells us and
+# what the svn tells us, we should look into this.
+if ! [[ ${WP_LATEST} == ${WP_SVN_LATEST} ]] ; then
+  echo "WP.com and svn.wp.com have different versions. (${WP_LATEST} is not ${WP_SVN_LATEST})"
+  EXITCODE=1
+fi
+
+# If either svn or website versions differ from what we got, we should get an
+# alert.
+if ! [[ ${WP_VERSION} == ${WP_SVN_LATEST} ]] || ! [[ ${WP_VERSION} == ${WP_LATEST} ]] ; then
+  echo "WordPress needs updating! You are running ${WP_VERSION}, but latest svn is ${WP_SVN_LATEST} and latest release is ${WP_LATEST}"
+  EXITCODE=2
+fi
+
+
+exit ${EXITCODE}
+

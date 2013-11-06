@@ -1,0 +1,4 @@
+# PUPPET
+# Customized to disable reverse DNS checks, which are pretty redundant since we use GnuTLS
+# ...and they don't work that well in local virtual environments
+RSYSLOGD_OPTIONS="-c5 -x"

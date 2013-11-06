@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+
+set -e
+set -x
+
+TAG=$1
+if [[ "x$TAG" == "x" ]]; then
+    echo "Usage: $0 <release-tag>"
+    exit 1
+fi
+RELEASE=`date +%Y%m%d%H%M%S`
+RELEASE=$TAG-$RELEASE
+
+# variables from puppet...
+wp_user=<%= wp_user %>
+wp_group=<%= wp_group %>
+wp_repo=<%= wp_repo %>
+www_group=<%= www_group %>
+
+app_root=<%= app_root %>
+app_config=<%= app_config %>
+app_sunrise=<%= app_sunrise %>
+app_advanced_cache=<%= app_advanced_cache %>
+app_cache_config=<%= app_cache_config %>
+app_current=<%= app_current %>
+#doc_root=<%= doc_root %>
+app_repo=<%= app_repo %>
+app_releases=<%= app_releases %>
+#app_release_0=<%= app_release_0 %>
+app_release=$app_releases/$RELEASE
+themes=<%= themes %>
+languages=<%= languages %>
+plugins=<%= plugins %>
+uploads=<%= uploads %>
+multi_uploads=<%= multi_uploads %>
+
+if [[ ! -d $app_releases ]]; then
+    echo "Directory $app_releases does not exist. Aborting."
+    exit 1
+fi
+
+if [[ -d $app_release ]]; then
+    echo "Directory $app_release already exists. Aborting."
+    exit 1
+fi
+
+# fetch wordpress into /home/wp/www/repo
+if [[ -d $app_repo ]]; then
+    cd $app_repo
+    git reset --hard
+    git checkout master
+    git pull --all
+    git fetch --tags
+    git checkout $TAG
+else
+    mkdir $app_repo
+    cd $app_repo
+    git clone $wp_repo .
+    git checkout $TAG
+fi
+
+# put wordpress 3.4 into /home/wp/www/releases/3.4-20120612170823/public
+# http://stackoverflow.com/questions/160608/how-to-do-a-git-export-like-svn-export
+mkdir $app_release
+mkdir $app_release/public
+git archive $TAG | tar -x -C $app_release/public
+
+# link /home/wp/www/wp-config.php into /home/wp/www/releases/3.4-20120612170823/
+ln -s $app_config $app_release
+# link /home/wp/www/sunrise.php into /home/wp/www/releases/3.4-20120612170823/public/wp-content/
+ln -s $app_sunrise $app_release/public/wp-content/
+# supercache does not play well with qtranslate :-(
+# link /home/wp/www/advanced-cache.php into /home/wp/www/releases/3.4-20120612170823/public/wp-content/
+#ln -s $app_advanced_cache $app_release/public/wp-content/
+# link /home/wp/www/wp-cache-config.php into /home/wp/www/releases/3.4-20120612170823/public/wp-content/
+#ln -s $app_cache_config $app_release/public/wp-content/
+
+# copy /home/wp/www/themes/* into /home/wp/www/releases/3.4-20120612170823/public/wp-content/themes/
+if [[ -d $themes ]]; then
+    for i in `ls $themes`; do
+        if [[ -d $themes/$i ]]; then
+            # unforuntately, not all themes can cope with 'ln -s'
+            cp -a $themes/$i $app_release/public/wp-content/themes/$i
+        fi
+    done
+fi
+
+# copy /home/wp/www/plugins/* into /home/wp/www/releases/3.4-20120612170823/public/wp-content/plugins/
+if [[ -d $plugins ]]; then
+    for i in `ls $plugins`; do
+        if [[ -d $plugins/$i ]]; then
+            # unforuntately, not all plugins can cope with 'ln -s'
+            cp -a $plugins/$i $app_release/public/wp-content/plugins/$i
+        fi
+    done
+fi
+
+# copy /home/wp/www/languages/* into /home/wp/www/releases/3.4-20120612170823/public/wp-content/languages/
+if [[ -d $languages ]]; then
+    if [[ ! -d $app_release/public/wp-content/languages ]]; then
+        mkdir -p $app_release/public/wp-content/languages
+    fi
+    for i in `ls $languages`; do
+        # unforuntately, not all themes can cope with 'ln -s'
+        cp -a $languages/$i $app_release/public/wp-content/languages/$i
+    done
+fi
+
+# set permissions on the release
+find $app_release/public -type d -exec chmod 755 {} \;
+find $app_release/public -type f -exec chmod 644 {} \;
+
+# link /home/wp/www/uploads into /home/wp/www/releases/3.4-20120612170823/public/wp-content/
+if [[ -d $uploads ]]; then
+    ln -s $uploads $app_release/public/wp-content/
+fi
+
+# link /home/wp/www/multi_uploads into /home/wp/www/releases/3.4-20120612170823/public/wp-content/
+if [[ -d $multi_uploads ]]; then
+    ln -s $multi_uploads $app_release/public/wp-content/blogs.dir
+fi
+
+# finally, update the link from /home/wp/www/current to switch to the new version
+rm -f $app_current.new
+ln -s $app_release/ $app_current.new
+mv -Tf $app_current.new $app_current
+
+echo Now serving Wordpress version $TAG

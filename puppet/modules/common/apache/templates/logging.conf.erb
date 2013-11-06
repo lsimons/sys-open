@@ -1,0 +1,9 @@
+<% if @apache['enable_logging'] == 1 %>
+LogFormat "%A %m %{HTTPS}x %{HOST}i %U %q %>s %T %b %{SSL_CLIENT_S_DN_CN}x" syslogged
+LogLevel               warn
+ErrorLog               |/usr/local/bin/apache_errorlog
+CustomLog              |/usr/local/bin/apache_accesslog    syslogged
+<% else %>
+LogLevel               crit
+ErrorLog               |/usr/local/bin/apache_errorlog
+<% end %>

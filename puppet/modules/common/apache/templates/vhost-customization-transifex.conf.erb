@@ -1,0 +1,15 @@
+Alias /site_media/ /var/www/txenv/transifex/transifex/site_media/
+<Directory /var/www/txenv/transifex/transifex/site_media/>
+    Order deny,allow
+    Allow from all
+</Directory>
+
+WSGIScriptAlias / /var/www/txenv/transifex/wsgi.py
+WSGIPassAuthorization On
+
+<Directory /var/www/txenv/transifex>
+    <Files wsgi.py>
+    Order deny,allow
+    Allow from all
+    </Files>
+</Directory>

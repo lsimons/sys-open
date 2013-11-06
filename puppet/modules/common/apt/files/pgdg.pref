@@ -1,0 +1,4 @@
+# PUPPET
+Package: *
+Pin: release o=apt.postgresql.org
+Pin-Priority: 500

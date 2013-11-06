@@ -1,0 +1,57 @@
+#PUPPET 
+
+# EXAMPLES: 
+# createUser monkey MD5 "2bananas"
+#rouser monkey noauth
+# USAGE snmpwalk -v 3  -u monkey1 -A 2bananas pup11 system
+
+#createUser monkey1 MD5 "2bananas" DES "crymeariver"
+#rouser monkey1 auth
+# USAGE: snmpwalk -v 3  -u monkey1 -A 2bananas -l authNoPriv pup11 system
+
+#createUser monkey2 MD5 "2bananas" DES "crymeariver"
+#rouser monkey2 auth
+# USAGE:  snmpwalk -v 3  -u monkey1 -A 2bananas -l authPriv -x DES -X
+# crymeariver pup11
+
+#createUser monkey3 MD5 "2bananas" DES "crymeariver"
+#createUser supervisor MD5 supervisorpw DES supervisorx
+#rouser supervisor priv
+#rouser monkey3 priv
+# USAGE:  snmpwalk -v 3 -u supervisor -l authPriv  -A supervisorpw -x DES -X
+# supervisorx localhost 
+# USAGE:  snmpwalk -v 3 -u monkey3 -l authPriv  -A 2bananas -x DES -X
+# crymeariver localhost 
+
+# ACTUAL CONFIG:
+agentAddress  161
+createUser <%= snmp["user"] %> MD5 "<%= snmp["password"] %>" DES "<%= snmp["passphrase"] %>"
+
+rouser <%= snmp["user"] %> priv
+
+
+sysLocation    <%= server_location %>
+sysContact     <%= server_admin_email %> 
+sysServices    72
+
+# Show all disks with at least 0kb used:
+includeAllDisks  0
+
+# Show load and set warning bit to 1 when load exeeds over X Y Z, for
+# X=5min/avg, Y=10min/avg and Y=15min/avg:
+load 5 3 1
+
+
+# Check if a reboot is required:
+# snmpget localhost 'NET-SNMP-EXTEND-MIB::nsExtendOutputFull."rebootrequired"' -OvQ
+sh rebootrequired /bin/bash /etc/snmp/extensions/rebootrequired.sh
+
+# Check if there are updates:
+# snmpget localhost 'NET-SNMP-EXTEND-MIB::nsExtendOutputFull."updates_available"' -OvQ
+sh updates_available /bin/bash /etc/snmp/extensions/updates_available.sh
+
+# Memory output of snmp is not all that's cracked up to be. Using Free to
+# actually get some sane stuff to parse by Nagios plugins:
+sh true_mem /bin/bash /etc/snmp/extensions/true_mem.sh
+
+exec puppet_freshness /etc/snmp/extensions/check_puppet.rb

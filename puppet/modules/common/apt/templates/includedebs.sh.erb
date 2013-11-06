@@ -1,0 +1,23 @@
+#!/bin/bash
+# PUPPET
+
+# invokes dpkg-sig to sign packages, then
+# invokes reprepro to add files from incoming/ into the repo
+
+REPODIR=<%= repodir %>
+INCOMING=<%= incomingdir %>
+CODENAME=<%= codename %>
+GNUPGHOME=<%= gnupg_dir %>
+COMPONENT=devel
+
+cd ${REPODIR}
+
+# http://stackoverflow.com/questions/2937407/test-whether-a-glob-has-any-matches-in-bash
+if test -n "$(find ${INCOMING} -maxdepth 1 -name '*.deb' -print -quit)"; then
+  set -e
+  for i in `ls ${INCOMING}/*.deb`; do
+    dpkg-sig --sign builder $i 2>&1 >/dev/null | logger -p err -t includedebs.sh
+    reprepro --gnupghome=${GNUPGHOME} -v --waitforlock 5 -b ${REPODIR} -C ${COMPONENT} includedeb ${CODENAME} $i 2>&1 | logger -p err -t includedebs.sh
+    rm $i
+  done
+fi

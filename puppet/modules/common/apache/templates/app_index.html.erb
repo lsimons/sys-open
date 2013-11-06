@@ -1,0 +1,123 @@
+<%
+    def is_true?(var)
+      # default (nil) interpreted as true
+      return [nil, 1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+    def is_strictly_true?(var)
+      # default (nil) interpreted as false
+      return [1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+    
+    apps = []
+    @passenger_apps.each do |app|
+      app["is_passenger"] = true
+      app["is_php"] = false
+      app["is_wsgi"] = false
+      app["is_java"] = false
+      apps.push(app)
+    end
+    @php_apps.each do |app|
+      app["is_passenger"] = false
+      app["is_php"] = true
+      app["is_wsgi"] = false
+      app["is_java"] = false
+      apps.push(app)
+    end
+    @wsgi_apps.each do |app|
+      app["is_passenger"] = false
+      app["is_php"] = false
+      app["is_wsgi"] = true
+      app["is_java"] = false
+      apps.push(app)
+    end
+    @java_apps.each do |app|
+      app["is_passenger"] = false
+      app["is_php"] = false
+      app["is_wsgi"] = false
+      app["is_java"] = true
+      apps.push(app)
+    end
+%>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Example <%= @env %> applications</title>
+  
+  <link media="all" type="text/css" rel="stylesheet" href="/example-all.css">
+  <link href='https://fonts.googleapis.com/css?family=Ubuntu:400,500,700,700italic,400italic,500italic,300italic,300' rel='stylesheet' type='text/css'>
+  <link href='https://fonts.googleapis.com/css?family=Paprika' rel='stylesheet' type='text/css'>
+  <meta http-equiv="Content-Language" content="nl-NL" />
+</head>
+<body>
+  <div class="wrapper">
+    <header id="header">
+      <strong class="logo">
+        <a href="http://www.example.com">Example</a></strong>
+      <nav id="nav">
+        <ul id="navigation-top" class="navigation-top">
+          <li class="menu-item menu-item-type-post_type menu-item-object-page">
+            <a href="http://www.example.com/">
+              <span>Example</span></a></li>
+          <li class="menu-item menu-item-type-post_type menu-item-object-page">
+            <a href="https://example.atlassian.net/wiki/display/DOC/Home">
+              <span>Documentation</span></a></li>
+        </ul>
+      </nav>
+      <span class="shadow01"></span>
+    </header>
+    <div id="main">
+      <div class="m1">
+        <div class="m2">
+          <section class="container">
+            <div class="container-holder">
+              <div class="intro">
+                <h1>Example <%= @profile %> <%= @env %> applications</h1>
+                <p>On this server, you can find the <%= @env %> versions of the following applications:</p>
+              </div>
+              <article class="info-box">
+                <ul>
+  <% apps.each do |app| %>
+    <%
+      app_name = app['AppName']
+      app_user = app['User']
+      fqdn = "#{app_name}.#{env}.#{domain}"
+    
+      http_active          = is_true?(app['http_active'])     && is_true?(apache['http_active'])
+      https_active         = is_true?(app['https_active'])    && is_true?(apache['https_active'])
+      support_non_virtual  = is_strictly_true?(app['support_non_virtual']) || app['is_java']
+    %>
+    <% if http_active %>
+      <li>
+        <a href="http://<%= fqdn %>/"><%= app_name %></a>
+        <% if https_active %>
+          <a href="https://<%= fqdn %>/">(SSL version)</a><br>
+          <% if support_non_virtual %>
+            <a href="https://<%= clientcert %>/<%= app_name %>/">(SSL url for clients without Server Name Indication support)</a>
+          <% end %>
+        <% end %>
+      </li>
+    <% else %>
+      <% if https_active %>
+        <li>
+          <a href="https://<%= fqdn %>/"><%= app_name %> (SSL only)</a><br>
+          <% if support_non_virtual %>
+            <a href="https://<%= clientcert %>/<%= app_name %>/">(SSL url for clients without Server Name Indication support)</a>
+          <% end %>
+        </li>
+      <% end %>
+    <% end %>
+  <% end %>
+                </ul>
+              </article>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+    <footer id="footer">
+      <p>Copyright 2013 | <a href="http://www.example.com/">Example</a></p>     
+    </footer>
+  </div>
+</body>
+</html>

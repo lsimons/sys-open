@@ -1,0 +1,15 @@
+#PUPPET 
+#
+# As the snmp packages come without MIB files due to license reasons, loading
+# of MIBs is disabled by default. If you added the MIBs you can reenable
+# loaging them by commenting out the following line.
+mibs  +ALL
+
+<% if profile == "monitorhost" %>
+# Now nagios can just call snmpget/snmpwalk without extra authentication-flags
+defSecurityName <%= snmp["user"] %>
+defSecurityLevel authPriv
+defPassphrase <%= snmp["passphrase"] %>
+defAuthPassphrase <%= snmp["password"] %>
+defVersion 3
+<% end %>

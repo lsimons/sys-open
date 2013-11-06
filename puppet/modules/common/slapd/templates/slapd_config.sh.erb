@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -e
+set -x
+
+# when the cert. is configured, assume ldap is setup correctly
+if ! ldapsearch -Y EXTERNAL -H ldapi:/// -LLL -s base -b cn=config olcTLSCACertificateFile | grep olcTLSCACertificateFile
+then
+
+# tell slapd where to find the certificates and only allow TLS/SSL
+# http://www.zytrax.com/books/ldap/ch15/#tls
+# http://www.openldap.org/lists/openldap-technical/201302/msg00118.html
+
+#
+# all this does the following:
+# - set the ssl cert to use
+# - allow SSL on port 636 (ldaps) and TLS on port 389 (ldap)
+# - disallow non-TLS (unencrypted) on port 389
+# - disallow anonymous binds
+
+# We allow anything with more security than 50 bits. We can make this 256 
+# bits or required client certs, but then the ldap tools require special
+# attention before they work...
+
+ldapmodify -Y EXTERNAL -H ldapi:/// <<EOF
+dn: cn=config
+add: olcTLSCACertificateFile
+olcTLSCACertificateFile: /etc/ssl/certs/ca.pem
+-
+add: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /etc/ssl/ldap.dev.example.org_key.pem
+-
+add: olcTLSCertificateFile
+olcTLSCertificateFile: /etc/ssl/ldap.dev.example.org_cert.pem
+-
+add: olcDisallows
+olcDisallows: bind_anon
+-
+add: olcRequires
+olcRequires: bind
+-
+add: olcLocalSSF
+olcLocalSSF: 256
+-
+add: olcSecurity
+olcSecurity: ssf=50
+EOF
+
+# directory for custom databases
+mkdir -p /var/lib/ldap-db
+chown openldap.openldap /var/lib/ldap-db
+
+# slapd must have access to the certs
+usermod -a -G ssl-cert openldap
+
+# tell apparmor slapd may access the certs and the alternative db directory
+mkdir -p /etc/apparmor.d/local
+cat > /etc/apparmor.d/local/usr.sbin.slapd <<EOF
+# PUPPET
+/etc/ssl/ldap.dev.example.org_cert.pem r,
+/etc/ssl/ldap.dev.example.org_key.pem r,
+/var/lib/ldap-db/** rwk,
+EOF
+
+# this is the standard ubuntu file but with ldaps:/// and ldap:/// enabled
+cat > /etc/default/slapd <<EOF
+# PUPPET
+SLAPD_CONF=
+SLAPD_USER="openldap"
+SLAPD_GROUP="openldap"
+SLAPD_PIDFILE=
+SLAPD_SERVICES="ldapi:/// ldap:/// ldaps:///"
+#SLAPD_NO_START=1
+SLAPD_SENTINEL_FILE=/etc/ldap/noslapd
+SLAPD_OPTIONS=""
+EOF
+
+service apparmor reload
+service slapd restart
+
+fi

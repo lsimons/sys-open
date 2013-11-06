@@ -1,0 +1,187 @@
+# this file defines additional information to be associated with a
+# profile. In particular it defines the java_apps/passenger_apps/php_apps
+# configuration settings that determine what applications are (to be)
+# deployed to what profile.
+#
+# Note that the config in profiles.yml is overridden by the config in
+# environments.yml, and the config from environments.yml is then overridden
+# by the config in applications.yml. So moving configuration from
+# profiles.yml into this file overrides the environments.yml. For clarity,
+# don't do this :-)
+
+# please keep ports and serials aligned. Increment 'n' whenever adding
+# an app, and use that for your port and serial numbers:
+#   current (free) n:   43
+#   tomcat_http_port:   n + 8080
+#   tomcat_https_port:  n + 48080
+#   serials:
+#     dev:              n + 10000
+#     test:             n + 20000
+#     project1:           n + 30000
+#     live:             n + 40000
+#     local:            n + 50000
+# (note: we will run into problems hosting more than 10.000 apps :-))
+
+webapp:
+    java_apps:
+        # - AppName:            $appname
+        #   http_active:        0 | 1 (default: 1)
+        #   http_alt_active:    0 | 1 (default: 1)
+        #   https_active:       0 | 1 (default: 1)
+        #   tomcat_port:        8080
+        #   postgres_enabled:   0 | 1 (default: 0)
+        #   postgres_database:  $appname
+        #   postgres_user:      $appname
+        #   postgres_password:  $appname
+        - AppName:            hello
+          tomcat_http_port:   8085
+          tomcat_https_port:  48085
+          serials:
+            dev:    10003
+            test:   20003
+            project1: 30003
+            local:  50003
+        # INFRA-292
+        - AppName:            profileserver2
+          http_active:        1   # enable wslog acccess for easy debugging
+          http_alt_active:    0
+          https_active:       1
+          tomcat_http_port:   8118
+          tomcat_https_port:  48118
+          postgres_enabled:   1
+          postgres_database:  profileserver2
+          postgres_user:      profileserver2
+          postgres_password:  profileserver2
+          serials:
+            dev:    10038
+            test:   20038
+            project1: 30038
+            local:  50038
+        - AppName:            idserver2
+          postgres_enabled:   1
+          postgres_database:  idserver2
+          postgres_user:      idserver2
+          postgres_password:  idserver2
+          ldap_enabled:      1
+          # the name of the database on disc
+          ldap_database:     idserver2
+          # base name of the database
+          ldap_dn:           dc=idserver2,dc=example,dc=org
+          # this user always has admin access
+          ldap_rootdn:       cn=admin,dc=idserver2,dc=example,dc=org
+          # run slappasswd to generate password
+          ldap_rootpw:      "{SSHA}XASDASDAasdasDASaf/EFAEFAEFAEFAS"
+          tomcat_http_port:   8113
+          tomcat_https_port:  48113
+          serials:
+            dev:    10033
+            test:   20033
+            project1: 30033
+            local:  50033
+        # INFRA-303
+        - AppName:            codeset2
+          http_active:        0
+          http_alt_active:    0
+          https_active:       1
+          tomcat_http_port:   8121
+          tomcat_https_port:  48121
+          postgres_enabled:   1
+          postgres_database:  codeset2
+          postgres_user:      codeset2
+          postgres_password:  codeset2
+          serials:
+            dev:    10041
+            test:   20041
+            project1: 30041
+            local:  50041
+
+www:
+    passenger_apps:
+        # whenever adding passenger_apps, also need to define a user in the users module!
+        # - AppName:            $appname
+        #   User:               $appname
+        #   http_active:        0 | 1 (default: 1)
+        #   http_alt_active:    0 | 1 (default: 0)
+        #   https_active:       0 | 1 (default: 1)
+        #   postgres_enabled:   0 | 1 (default: 0)
+        #   postgres_database:  $appname
+        #   postgres_user:      $appname
+        #   postgres_password:  $appname
+        - AppName:            gpadmin
+          User:               hpdemo
+          serials:
+            test:   20006
+            local:  50006
+          support_non_virtual: 1
+        - AppName:            hadmin
+          User:               hpdemo
+          serials:
+            test:   20007
+            local:  50007
+          support_non_virtual: 1
+        - AppName:            radui
+          User:               hpdemo
+          serials:
+            test:   20008
+            local:  50008
+          support_non_virtual: 1
+    php_apps:
+        # whenever adding php_apps, also need to define a user in the users module!
+        - AppName:            uidemo
+          User:               project4
+          serials:
+            test:   20014
+            local:  50014
+        # INFRA-192
+        - AppName:            tools
+          User:               tools
+          serials:
+            test:   20017
+            local:  50017
+          support_non_virtual: 1
+        # INFRA-203
+        - AppName:            owncloud
+          User:               owncloud
+          serials:
+            test:   20019
+            local:  50019
+    wsgi_apps:
+        - AppName:            pootle
+          User:               pootle
+          postgres_enabled:   1
+          postgres_database:  pootle
+          postgres_user:      pootle
+          postgres_password:  pootle
+          serials:
+            test:   20042
+            local:  50042
+          support_non_virtual: 0
+          WSGIDaemonProcessOptions: python-path=/home/pootle/pootle/current:/var/www/txenv/lib/python2.7/site-packages user=pootle group=pootle
+
+manage:
+    php_apps:
+        # note that the 'manage' profile is actually using the default vhosts config
+        # so the /home/ca/ca stuff is unused and the ca lives in /var/www for now
+        # thanks to the apache::ca class
+        - AppName:            ca
+          User:               manage
+          serials:
+            # uses *.example.org cert on live
+            # live:   40040
+            local:  50040
+
+# special section to move apps to when they are deleted. Moving apps here
+#   revokes their certificate (TODO: and _should_ uninstall them)
+deleted:
+    java_apps:                []
+        # - AppName: foobar
+        #   serials:
+        #       dev: 23
+    passenger_apps:           []
+    wsgi_apps:                []
+    php_apps:
+        - AppName:            tobedeleted
+          User:               tobedeleted
+          serials:
+            local:  1234
+

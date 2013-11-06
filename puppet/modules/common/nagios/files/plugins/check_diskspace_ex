@@ -1,0 +1,57 @@
+#!/bin/bash
+
+if [ $# -ne 4 ] ; then
+  echo "Checks disk usage. Usage: $0 <hostname> <mountpoint> <warn> <crit>"
+  echo ""
+  echo "    hostname   : the host you aim to poll."
+  echo "    mountpoint : the mountpoint you want to know info about."
+  echo "    warn       : at what percentage of diskspace should nagios give warning?"  
+  echo "    crit       : at what percentage of diskspace should nagios call you at home?"
+  echo ""
+  echo "Example: $0 bigapeinc.com / 80 95"
+  exit ${STATUS_UNKNOWN}
+fi
+
+TARGET="$1"
+MOUNTPOINT="$2"
+WARN="$3"
+CRIT="$4"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+# All snmp disk checking scripts are outdated perl searching for modules that
+# no longer have a right to existence.
+
+# I'm hitting snmp twice here: once a walk and once a get. I could probably
+# work with one walk and parsing that output.
+
+# We need this snmpwalk to find our mountpoint. After we get our mountpoint, we
+# can logically determine what the OID is of the diskusage of that mountpoint.
+
+PATH_OID=`snmpwalk -On ${TARGET} .1.3.6.1.4.1.2021.9 | grep STRING:\ ${MOUNTPOINT}$ | xargs | cut -d ' ' -f 1`
+
+# The OID that will tell us the diskusage percentage of our mountpoint:
+MOUNTPOINT_PERCENTAGE_OID=`echo ${PATH_OID} | sed -e 's/2021\.9\.1\.2/2021\.9\.1\.10/' `
+
+# The percentage of space free:
+RESULT="`snmpget -OvQ ${TARGET} ${MOUNTPOINT_PERCENTAGE_OID}`"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+if [[  ${RESULT} -gt ${CRIT} ]]  ; then
+  echo "DISK ${MOUNTPOINT} CRITICAL: ${RESULT}% > ${CRIT}%"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [[  ${RESULT} -gt ${WARN} ]] ; then
+  echo "DISK ${MOUNTPOINT} WARNING: ${RESULT}% > ${WARN}%"
+  exit ${STATUS_WARNING}
+fi
+
+echo "DISK ${MOUNTPOINT} OK: ${RESULT}%"
+exit ${STATUS_OK}

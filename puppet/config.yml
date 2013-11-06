@@ -1,0 +1,208 @@
+# this file contains the global/default configuration settings
+# It is overridden by the the per-profile config from profiles.yml
+# the per-environment config from environments.yml, the per-profile
+# config from apps.yml, and finally the per-system config from
+# systems.yml
+
+server_admin_email: ops@old.example.com
+server_admin_name:  Example Operations
+server_location:    London
+loghost:            log01.lonrs.manage.example.org
+monitorhost:        1.2.3.4
+monitor:            1
+domain:             example.org
+# what to do to ensure => packages. latest auto-upgrades, present
+# installs latest version but does not auto-upgrade.
+package_ensure:     present
+management:
+    # a list of environments that our management host(s) should not attempt to manage
+    exclude_environments: []
+
+apache:
+    http_active:             1
+    http_listener:           '*:80'
+    http_redirect_to_ssl:    1
+    https_active:            1
+    https_listener:          '*:443'
+    http_alt_active:         0
+    http_alt_listener:       '*:8080'
+    ServerAdmin:             ops@old.example.com
+    ServerName:              www.example.com
+    ServerAlias:             localhost
+    DocumentRoot:            /var/www
+    # whether apache should verify client certificaes
+    SSLVerifyClient:         optional
+    # which CA to use to verify clients
+    SSLCACertificateFile:    /etc/ssl/certs/ca-certificates.crt
+    # whether there's any custom rules to apply inside a <Location /> block
+    #   (like SSLRequire restricting on client DN)
+    ssl_location_directives: []
+    ssl_services:            {}
+    # whether to list all passenger_apps / php_apps / wsgi_apps in a root index.html
+    app_index:               0
+    mod_userdir:             0
+    mod_proxy:               0
+    mod_php:                 0
+    mod_rewrite:             0
+    mod_wsgi:                0
+    # whether apache should be logging access logs and warnings, or just errors
+    enable_logging:          1
+    # whether to add a robots.txt
+    disable_robots:          1
+
+mail:
+    # smarthost must be a FQDN and that FQDN must match the certificate of the smarthost
+    smarthost: mail01.lonrs.manage.example.org
+
+mysql:
+    max_connections:         128
+    query_cache_size:        64
+    innodb_buffer_pool_size: 256
+    table_cache:             64
+    max_allowed_packet:      128
+    key_buffer_size:         8
+
+nagios:
+    authorized_for_system_information:        nagios
+    authorized_for_configuration_information: nagios
+    authorized_for_system_commands:           nagios
+    authorized_for_all_services:              nagios
+    authorized_for_all_hosts:                 nagios
+    authorized_for_all_service_commands:      nagios
+    authorized_for_all_host_commands:         nagios
+    authorized_for_read_only:                 nagiosreadonly
+    host_use:                                 generic-host
+
+rsyslog:
+    # client is whitelisted
+    client_cert_validation:                   x509/name
+    # client is not validated at all
+    #client_cert_validation:                   anon
+    # client cert is validated, any valid cert goes
+    #client_cert_validation:                   x509/certvalid
+    # how long do we keep log files on the log host
+    log_retention_days:                       365
+    local_log:                                0
+
+pki:
+    # The most tricky bit of the PKI setup is actually ensuring every
+    # certificate (every machine and/or service) gets a unique serial
+    # number. Convention:
+    # * machine serial numbers go from 100-100000
+    #   * given machine name svcXX, if XX >= 17, serial = 1000 + XX
+    #   * management hosts have a serial <= 1017
+    # * services serial numbers go from 100001-200000
+    #
+    # X.509 Certificate options (passed to certtool)
+    # DN options
+    ca_folder:               /etc/sys/puppet/modules/common/pki/files
+    # The organization of the subject.
+    ca_org:                  Example
+    # The organizational unit of the subject.
+    ca_unit:                 Operations
+    # The country of the subject. Two letter code.
+    ca_country:              NL
+    # The state of the certificate owner.
+    ca_state:                ZH
+    # The locality of the subject.
+    ca_locality:             Leiden
+    # An email in case of a personal certificate
+    ca_email:                ops@example.org
+    # The absolute URL to the location of the CRL
+    ca_crl_dist_point:       https://ca.example.org/crl.pem
+    # In how many days, counting from today, this certificate will expire. 7800 ~ 20 years
+    ca_expiration_days:      7800
+    client_expiration_days:  7800
+    # file where we store the md5 checksums of host certs that can be used to send mail
+    postfix_clientcerts:     /etc/sys/puppet/modules/common/mail/files/relay_clientcerts
+    # hash of fqdn => serial for service certificates
+    service_certificates:    {}
+    # hash of fqdn => serial for revoked service certificates
+    revoked_services:        {}
+
+apt:
+    publish_dir:             /etc/sys/puppet/modules/common/apt/files
+    publish_name:            ex
+    password:                'adfasdDFGJDFGHJfasdf#$%^#$^3525235'
+
+
+snmp:
+    user:       nagiosmonkey
+    password:   asgafDGSDFHSdfhsdfhSghSFGHsfGhjDFgjTfykjr7ysDFSthdfGHsfghSfghSFg
+    passphrase: zsdgASGFSDFhgsadfhSDghSFghSDgjhSfJDnDYjfHGnFmDhmFGmFMfmfUmFuKghj
+
+systemrvm:
+    ruby_version:                 1.9.3-p125
+    passenger_version:            3.0.11
+    passenger_maxpoolsize:        30
+    passenger_poolidletime:       300
+    passenger_mininstances:       1
+    passenger_maxinstancesperapp: 10
+    passenger_spawnmethod:        smart-lv2
+
+tomcat:
+    http_port:               8008
+    https_port:              48008
+    https_active:            1
+    # whether tomcat should be logging info and warnings, or just errors
+    enable_logging:          1
+    # how much memory to give the tomcat JVM ( -Xmx )
+    memory_max:              512m
+
+puppet:
+    # Upgrading puppet by hand normally works ok sort of ok. You can try using puppet to
+    # upgrade puppet; it often works.
+    # Using puppet to downgrade itself is problematic at best. Run
+    #     apt-get remove puppet puppet-common puppetmaster puppetmaster-common facter
+    #     /usr/local/sbin/puppetlabs.sh <on|off>
+    #     apt-get update
+    #     apt-get install puppet puppet-common
+    # on any machines that get messed up. Also run
+    #     apt-get install puppetmaster puppetmaster-common
+    # if its the master that's in trouble.
+    #
+    # to use the puppetlabs apt repo (typically has newer versions than ubuntu):
+    use_puppetlabs_version:  0
+    # to explicitly use a specific ubuntu version, use something like:
+    #   version:                 2.7.11-1ubuntu2.1
+    #   facter_version:          1.6.5-1ubuntu1
+    # to explicitly use a specific puppetlabs version, use something like:
+    #   version:                 3.0.1-1puppetlabs1
+    #   facter_version:          1.6.14-1puppetlabs1
+    # to use the latest available version (if using puppetlabs, this is usually the puppetlabs version):
+    #   version:                 latest
+    #   facter_version:          latest
+    # or, most safely, to not auto-upgrade after first install and simply attempt to use what's there:
+    version:                 installed
+    facter_version:          installed
+    # whether puppet syslog should be kept. This can be a security risk if someone
+    # is using show_diff (i.e. puppet agent -t will do that for you) so the
+    # default is _off_.
+    enable_logging:          0
+    passenger_version:       3.0.19
+    passenger_maxpoolsize:        2 # limit memory use
+    passenger_poolidletime:       600
+    passenger_mininstances:       1
+    passenger_maxinstancesperapp: 0
+    passenger_spawnmethod:        smart-lv2
+
+backup:
+    rackspace_api_key:       safadr25346tgw45tsgs5yhsh6dhdrhjd
+    rackspace_api_user:      examplerackspaceapiclient
+    mysql_backup_dir:        /home/backup01/automysqlbackup
+    mysql_backup_window:     90
+    postgres_backup_dir:     /home/backup01/autopostgresqlbackup
+    postgres_backup_window:  90
+
+wordpress:
+    sites:
+    - ServerName: www.project2-project.eu
+      ServerAlias: "*.project2-project.eu project2-project.eu"
+      SSLCertificateFile:    /etc/ssl/cert/www_project2-project_eu.crt
+      SSLCertificateKeyFile: /etc/ssl/cert/www_project2-project_eu.key
+      SSLCACertificateFile:  /etc/ssl/cert/PositiveSSL-bundle.ca-bundle
+    - ServerName: www.example.com
+      ServerAlias: "*.example.com example.com"
+      SSLCertificateFile:    /etc/ssl/cert/www.example.com.crt
+      SSLCertificateKeyFile: /etc/ssl/cert/www.example.com.key
+      SSLCACertificateFile:  /etc/ssl/cert/PositiveSSL-bundle.ca-bundle

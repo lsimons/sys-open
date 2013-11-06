@@ -1,0 +1,118 @@
+# this file defines different server profiles. A server profile is
+# environment-independent functional grouping of functionality that
+# gets applied to a system based on the 'profile' setting of that
+# system. In other words, this is where we mainly define the
+# classes that make up a profile.
+#
+# Note that this configuration is overridden by the configuration
+# in environments.yml and then again by the configuration in apps.yml
+# and systems.yml.
+
+default:
+    classes:
+        # basic list of classes that is shared by all profiles
+        appconf:
+        basepackages:
+        unattendedupgrades:
+        firewall:
+        sshd:
+        ntp:
+        puppet:
+        users:
+        sudo:
+        pki::host:
+        apt::host:
+        mail: 
+        rsyslog:
+        snmp:
+        munin::client:
+        # java by default because we need to run keytool
+        java:
+        deploy:
+        backup:
+
+base:
+    classes: {}
+    # fallback profile with classes for machines where we don't install very much at all
+
+# --------------------------------
+#       Management Profiles
+# --------------------------------
+manage:
+    # management profile for puppet master
+    apache:
+        mod_php:              1
+    classes:
+        puppetmaster:
+        pki::ca:
+        apt::repo:
+        nagios::puppetconfigs:
+        apache:
+        apache::ca:
+
+smarthost:
+    # management profile for e-mail server
+    classes:
+        firewall::smtp:
+
+loghost:
+    # management profile for syslog server
+    classes:
+        firewall::syslog_alt:
+
+monitorhost:
+    # management profile for nagios/munin server
+    apache:
+        mod_php:              1
+    classes:
+        munin::server:
+        nagios:
+
+# --------------------------------
+#       Hosting Profiles
+# --------------------------------
+www:
+    # web hosting for ruby-on-rails-, php- and and wsgi-based applications
+    apache:
+        http_redirect_to_ssl: 0
+        app_index:            1
+        mod_php:              1
+        mod_rewrite:          1
+        mod_proxy:            1
+        mod_wsgi:             1
+    classes:
+        apache:
+        systemrvm:
+        # php is included from apache if mod_php: 1
+        postgres:
+        appdb:
+
+webapp:
+    # web hosting for tomcat-based app services
+    apache:
+        mod_proxy:            1
+        http_alt_active:      1
+        app_index:            1
+    classes:
+        apache:
+        postgres:
+        tomcat:
+        firewall::http_alt:
+        firewall::http_tomcat:
+        appdb:
+
+wpdb:
+    # database host for wordpress web hosting
+    classes:
+        mysql:
+        wpdb:
+
+wp:
+    # web host for wordpress web hosting
+    apache:
+        mod_php:     1
+        mod_rewrite: 1
+    classes:
+        apache:
+        # php is included from apache if mod_php: 1
+        wp:

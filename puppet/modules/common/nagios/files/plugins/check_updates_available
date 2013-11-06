@@ -1,0 +1,40 @@
+#!/bin/bash
+# PUPPET 
+
+if [ $# -ne 1 ] ; then
+  echo "Checks whether package updates are needed. Usage: $0 <hostname>"
+  echo ""
+  echo "    hostname: the host you aim to poll."
+  echo ""
+  echo "Example: $0 bigapeinc.com"
+  exit ${STATUS_UNKNONW}
+fi
+
+TARGET="$1"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+RESULT="`snmpget ${TARGET} 'NET-SNMP-EXTEND-MIB::nsExtendOutput1Line."updates_available"'  -OvQ`"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+echo "${RESULT}"
+
+if [[ "${RESULT}" == *"failed"* ]]; then
+  exit ${STATUS_UNKNOWN}
+elif [[ "${RESULT}" == *"non-security update"* ]]; then
+  # we're ok with some pending updates as long as they don't seem critical...
+  # exit ${STATUS_WARNING}
+  exit ${STATUS_OK}
+elif [[ "${RESULT}" == *"security update"* ]]; then
+  # a lot of security updates are not critical to us, calm down...
+  # exit ${STATUS_CRITICAL}
+  exit ${STATUS_WARNING}
+else
+  exit ${STATUS_OK}
+fi

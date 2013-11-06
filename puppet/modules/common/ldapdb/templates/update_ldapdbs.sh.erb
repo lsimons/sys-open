@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -e
+
+# this silly shell script is generated because looping over hashes in puppet is horrible...
+
+LDAPSEARCH=/usr/bin/ldapsearch
+LDAPADD=/usr/bin/ldapadd
+
+<% begin
+    apps = passenger_apps + php_apps + wsgi_apps + java_apps
+    apps.each do |app| %>
+        <% if app['ldap_enabled'] == 1 %>
+LDAPNAME=<%= app['ldap_database'] %>
+LDAPDN=<%= app['ldap_dn'] %>
+LDAPROOTDN=<%= app['ldap_rootdn'] %>
+LDAPROOTPW=<%= app['ldap_rootpw'] %>
+LDAPORG="<%= app['ldap_organization'] %>"
+LDAPDESC="<%= app['ldap_description'] %>"
+
+# check to see if database exists, this relies on allowing the user root to have full access to the database
+if $LDAPSEARCH -Y EXTERNAL -H ldapi:/// -b "$LDAPDN" -s one > /dev/null
+then
+    echo "*** database $LDAPNAME exists..."
+else
+    echo "*** creating database $LDAPNAME..."
+
+    # create the database
+    DIR=/var/lib/ldap-db/$LDAPNAME
+    mkdir -p "$DIR"
+    chown openldap.openldap $DIR
+        
+    $LDAPADD -Y EXTERNAL -H ldapi:/// <<EOF
+dn: olcDatabase=hdb,cn=config
+objectClass: olcDatabaseConfig
+objectClass: olcHdbConfig
+olcDatabase: hdb
+olcDbDirectory: $DIR
+olcSuffix: $LDAPDN
+olcRootDN: $LDAPROOTDN
+olcRootPW: $LDAPROOTPW
+olcDbIndex: uid pres,eq
+olcDbIndex: cn,sn pres,eq,approx,sub
+olcDbIndex: objectClass eq
+olcLastMod: TRUE
+olcDbCheckpoint: 512 30
+olcDbConfig: {0}set_cachesize 0 2097152 0
+olcDbConfig: {1}set_lk_max_objects 1500
+olcDbConfig: {2}set_lk_max_locks 1500
+olcDbConfig: {3}set_lk_max_lockers 1500
+olcAccess: to *
+  by dn.exact=gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth manage
+  by anonymous auth
+
+EOF
+
+    # Don't forget this or else it wont work and you spend a whole day trying 
+    # to figure out what is wrong....
+    $LDAPADD -Y EXTERNAL -H ldapi:/// <<EOF
+dn: $LDAPDN
+objectClass: dNSDomain
+dc: $LDAPNAME
+EOF
+
+fi
+
+
+        <% end %>
+    <% end %>
+<% rescue NameError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps undefined
+<% rescue NoMethodError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps not iterable
+<% end %>

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -e
+set -x
+
+# this silly shell script is generated because looping over hashes in puppet is horrible...
+
+<% begin
+    apps = passenger_apps + php_apps + wsgi_apps + java_apps
+    apps.each do |app| %>
+        <% if app['davical_enabled'] == 1 %>
+APPPASSWORD=<%= app['davical_apppw'] %>
+DBAPASSWORD=<%= app['davical_dbapw'] %>
+DATABASE=<%= app['davical_database'] %>
+ADMINPW=<%= app['davical_adminpw'] %>
+LDAPHOST=<%= app['davical_ldaphost'] %>
+LDAPBINDPW=<%= app['davical_ldapbindpw'] %>
+LDAPBINDDN=<%= app['davical_ldapbinddn'] %>
+LDAPUSERBASE=<%= app['davical_ldapuserbase'] %>
+LDAPGROUPBASE=<%= app['davical_ldapgroupbase'] %>
+APPNAME=<%= app['AppName'] %>
+PROFILESERVERPW=<%= app['davical_profileserverpw'] %>
+ENV=<%= env %>
+
+cat > /etc/davical/administration.yml <<EOF
+# PUPPET
+admin_db_user: davical_dba
+admin_db_pass: $DBAPASSWORD
+admin_db_host: localhost
+admin_db_name: $DATABASE
+app_db_user: davical_app
+EOF
+
+
+if ! su postgres -c "psql $DATABASE -c \"SELECT version();\" > /dev/null 2>&1"
+then
+  su postgres -c "psql -q -c \"CREATE ROLE davical_app WITH PASSWORD '$APPPASSWORD' LOGIN NOCREATEDB NOCREATEROLE;\" template1"
+  su postgres -c "psql -q -c \"CREATE ROLE davical_dba WITH PASSWORD '$DBAPASSWORD' LOGIN CREATEDB NOCREATEROLE;\" template1"
+
+  # it seems postgres is case sensitive now...
+  mv /usr/share/davical/dba/davical.sql /usr/share/davical/dba/davical.sql.old
+  sed 's/PlPgSQL/plpgsql/' /usr/share/davical/dba/davical.sql.old > /usr/share/davical/dba/davical.sql
+
+  PGHOST=localhost PGUSER=davical_dba PGPASSWORD=$DBAPASSWORD /usr/share/davical/dba/create-database.sh $DATABASE $ADMINPW  
+
+  # add the 'i-can-access-all-calendars' user
+  su postgres -c "psql -q -c \"INSERT INTO usr ( user_no, active, email_ok, updated, username, password, fullname, email ) VALUES (100, TRUE, current_date, current_date, 'profileserver', '**$PROFILESERVERPW', 'Profileserver', 'ops@example.com'); INSERT INTO principal ( principal_id, type_id, user_no, displayname, default_privileges ) VALUES ( 100, 1, 100, 'Profileserver', 0::BIT(24) ); INSERT INTO role_member (user_no, role_no) VALUES (100, 1);\" $DATABASE" 
+
+  # update e-mail address of admin
+  su postgres -c "psql -q -c \"UPDATE usr SET email = 'ops@example.com' WHERE user_no = 1\" $DATABASE"
+
+  /usr/share/davical/dba/update-davical-database  
+fi
+
+# now secure the config file, need to do this after calling the create-database.sh script
+chmod 600 /etc/davical/administration.yml
+
+cat > /etc/davical/$APPNAME.$ENV.example.org-conf.php <<EOF
+<?php
+// PUPPET
+\$c->pg_connect[] = 'dbname=$DATABASE user=davical_app password=$APPPASSWORD host=localhost';
+\$c->system_name = "Example CalDAV Server";
+\$c->admin_email = 'ops@example.com';
+\$c->default_relationships = array(
+  100 => array('all')
+);
+\$c->authenticate_hook['call'] = 'LDAP_check';
+\$c->authenticate_hook['config'] = array(
+  'protocolVersion' => '3',
+  'host' => '$LDAPHOST',
+  'port' => '636',
+  'bindDN' => '$LDAPBINDDN',
+  'passDN' => '$LDAPBINDPW',
+  'baseDNUsers' => '$LDAPUSERBASE',
+  'filterUsers' => 'objectClass=account',
+  'baseDNGroups' => '$LDAPGROUPBASE',
+  'filterGroups' => 'objectClass=groupOfNames',
+  'mapping_field' => array(
+    "username" => "uid",
+    "updated" => "modifyTimestamp",
+    "fullname" => "uid" ,
+    "email" =>"comGoogle"
+  ), 
+  'group_mapping_field' => array(
+    "username" => "cn",
+    "updated" => "modifyTimestamp",
+    "fullname" => "cn" ,
+    "members" =>"member"
+  ),
+  'format_updated'=> array('Y' => array(0,4),'m' => array(4,2),'d'=> array(6,2),'H' => array(8,2),'M'=>array(10,2),'S' => array(12,2)),
+  'scope'=>'subtree'
+);
+\$c->do_not_sync_from_ldap = array('admin' => true, 'profileserver' => true);
+include_once('drivers_ldap.php');
+?>
+
+EOF
+
+if [ ! -h /home/$APPNAME/$APPNAME/current/public ]
+then
+  rmdir /home/$APPNAME/$APPNAME/current/public
+  ln -s /usr/share/davical/htdocs /home/$APPNAME/$APPNAME/current/public
+fi
+
+        <% end %>
+    <% end %>
+<% rescue NameError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps undefined
+<% rescue NoMethodError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps not iterable
+<% end %>

@@ -1,0 +1,98 @@
+#!/bin/bash
+#PUPPET
+#
+# NAME: puppetrun
+#
+# SYNOPSYS:
+# This little script should be ran as root. 
+# It first does a dry-run of puppet. 
+# Then it asks for confirmation if it should really truly actually run. 
+# After that, puppet apply the actual changes.
+#
+# It would be nice if puppet could actually cache the catalog (+files) from the
+# --noop run. But I'm not sure it can.
+
+LOG="/var/log/puppetrun.log"
+TMPFOLDER=`mktemp -d`
+SYSLOG=0
+DEBUG=1
+
+function log() {
+    # Do some logging. 
+    # Also exits is loglevel is 'crit'.
+
+    if [[ ${LOG} == "" ]] ; then
+        echo 'CRIT: $LOG is not set.'
+        exit 1
+    fi
+
+    if [[ ${TMPFOLDER} == "" ]] ; then
+        echo 'CRIT: $TMPFOLDER is not set.'
+        exit 1
+    fi
+
+    if [[ ${SYSLOG} == "" ]] ; then
+        echo 'CRIT: $SYSLOG is not set.'
+        exit 1
+    fi
+
+    LOGLEVEL="`echo $1 | tr '[:lower:]' '[:upper:]'`"
+    MSG="`echo $* | sed -e "s/$1//g"`"
+    DATETIME="`date +%Y%m%d-%H%M%S`"
+
+    if [[ ${SYSLOG} -gt 0 ]] ; then
+        logger "$0 - [${LOGLEVEL}] - ${MSG}"
+    fi 
+    #echo "${DATETIME} - [${LOGLEVEL}] - ${MSG}" >> ${LOG}
+
+    if ! [[ ${1} == "debug" ]] ; then
+        echo "${DATETIME} - [${LOGLEVEL}] - ${MSG}" >> ${TMPFOLDER}/log.txt
+    else
+        if [ ${DEBUG} == "1" ] ; then
+            echo "${DATETIME} - [${LOGLEVEL}] - ${MSG}" >> ${TMPFOLDER}/log.txt
+        fi
+    fi
+
+    # Print everything to STDOUT if DEBUG is set
+    if [ ${DEBUG} == "1" ] ; then
+        echo "${DATETIME} - [${LOGLEVEL}] - ${MSG}" 
+    fi
+
+    # Fatal flaw. Exiting.
+    if [[ ${1} == "crit" ]] ; then
+        exit 1
+    fi
+
+    return
+}
+
+
+function bye() {
+    log info "$*"
+    rm -rf ${TMPFOLDER}
+    exit 0    
+}
+
+function main () {
+    log info "Testing if I can reach the puppetmaster."
+    nc puppet -z 8140 -w 1 || log crit "Can't connect to puppet."
+
+    log info "Starting puppet dry-run"
+    puppet agent -t --noop
+
+    echo -n "If the changes above look sane to you, type 'Y' and hit ENTER: "
+    read OK_TO_PROCEED
+    OK_TO_PROCEED=`echo ${OK_TO_PROCEED} |  tr '[:lower:]' '[:upper:]'`
+
+    if [[ ${OK_TO_PROCEED} == "Y" ]] ; then
+        puppet agent -t && log info "Looks like puppet ran OK. Please
+check the above logs for any errors."
+    else
+        log info "You did not answer with 'Y'. Abort. ABORT!"
+    fi
+
+    bye "ok, bye."
+}
+
+main
+

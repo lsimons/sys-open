@@ -1,0 +1,56 @@
+# PUPPET
+# http://tomcat.apache.org/tomcat-7.0-doc/logging.html
+
+<% if tomcat['enable_logging'] == 1 %>
+log4j.rootLogger=INFO, SYSLOG5
+
+# quiet down tomcat
+log4j.logger.org.apache.catalina=WARN, SYSLOG5
+log4j.additivity.org.apache.catalina=false
+
+log4j.logger.org.apache.coyote=WARN, SYSLOG5
+log4j.additivity.org.apache.coyote=false
+
+# these are the loggers producing the 'familiar' tomcat log info on startup/shutdown
+#   they get to stick to INFO (everything else goes to the rootLogger)
+log4j.logger.org.apache.catalina.core.StandardService=INFO, SYSLOG5
+log4j.additivity.org.apache.catalina.core.StandardService=false
+
+log4j.logger.org.apache.catalina.core.StandardEngine=INFO, SYSLOG5
+log4j.additivity.org.apache.catalina.core.StandardEngine=false
+
+log4j.logger.org.apache.catalina.startup.HostConfig=INFO, SYSLOG5
+log4j.additivity.org.apache.catalina.startup.HostConfig=false
+
+log4j.logger.org.apache.catalina.startup.Catalina=INFO, SYSLOG5
+log4j.additivity.org.apache.catalina.startup.Catalina=false
+
+log4j.logger.org.apache.coyote.AbstractProtocol=INFO, SYSLOG5
+log4j.additivity.org.apache.coyote.AbstractProtocol=false
+<% else %>
+log4j.rootLogger=ERROR, SYSLOG5
+<% end %>
+
+<%#
+# LOCAL4 would (also) go into the apache _access.log. This would be useful
+#   when correlating errors those access logs
+# log4j.appender.SYSLOG4 = org.apache.log4j.net.SyslogAppender
+# log4j.appender.SYSLOG4.syslogHost = 127.0.0.1
+# log4j.appender.SYSLOG4.layout = org.apache.log4j.PatternLayout
+# log4j.appender.SYSLOG4.layout.ConversionPattern = %d [%t] %-5p %c- %m%n
+# log4j.appender.SYSLOG4.Facility = LOCAL4
+%>
+
+log4j.appender.SYSLOG5 = org.apache.log4j.net.SyslogAppender
+log4j.appender.SYSLOG5.syslogHost = 127.0.0.1
+log4j.appender.SYSLOG5.layout = org.apache.log4j.PatternLayout
+#log4j.appender.SYSLOG5.layout.ConversionPattern = %d [%t] %-5p %c- %m%n
+log4j.appender.SYSLOG5.layout.ConversionPattern = <%= hostname %> tomcat: %-15.15t %5p %-40.40c - %0x %m%n
+log4j.appender.SYSLOG5.Facility = LOCAL5
+
+# for debugging the logging config itself
+# log4j.appender.CONSOLE=org.apache.log4j.ConsoleAppender
+# log4j.appender.CONSOLE.Encoding=UTF-8
+# log4j.appender.CONSOLE.layout = org.apache.log4j.PatternLayout
+# log4j.appender.CONSOLE.layout.ConversionPattern = <%= hostname %> tomcat-console: %-15.15t %5p %-40.40c - %0x %m%n
+# log4j.appender.CONSOLE.layout.ConversionPattern = %d [%t] %-5p %c- %m%n

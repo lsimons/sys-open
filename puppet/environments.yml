@@ -1,0 +1,124 @@
+# This file has per-environment configuration information
+#
+# Puppet is supposed to have a built-in 'environment' that can be used for
+# this, but that doesn't currently work well with external node classifiers
+# (see http://projects.puppetlabs.com/issues/3910 )
+# and so we have our own 'env' property that we use
+#
+# See
+#   https://example.atlassian.net/wiki/display/EX/Server+Environments
+# for a description of each environment
+live:
+    # production-purpose machines
+    # Note that, even though in DNS we have a distinct 'manage' environment, all those
+    # management hosts are _actually_ inside the 'live' environment.
+    monitor: 1
+    management:
+        exclude_environments:
+            - local
+    wpdb:
+        DB_DATA: wordpress
+        DB_USER: wpdb
+        DB_PASSWD: asdfSDGsdgSGsgD23523
+        # todo this is svc10. Probably don't want to hardcode like this, and support arrays, and ...
+        DB_HOST: 1.2.3.4
+        # todo this is svc11. Probably don't want to hardcode like this, and support arrays, and ...
+        DB_CLIENT_HOST: 1.2.3.4
+    apache:
+        enable_logging: 0
+    tomcat:
+        enable_logging: 0
+
+project1:
+    # production-purpose machines for the project1 project
+    monitor: 1
+    apache:
+        enable_logging:          0
+        SSLVerifyClient:         require
+        SSLCACertificateFile:    /usr/share/ca-certificates/local/ca.pem
+        ssl_location_directives:
+            - "# Restrict access to this particular hosting environment only"
+            - SSLRequire
+              %{SSL_CLIENT_S_DN_CN} =~ m/^[^\.]+[\.\-]project1\.example\.org$/i ||
+              %{SSL_CLIENT_S_DN_CN} =~ m/^[^\.]+\.lonrs\.project1\.example\.org$/i
+    tomcat:
+        enable_logging: 0
+
+test:
+    # non-production machines that are used for testing (possibly by 3rd parties)
+    monitor: 1
+    nagios:
+        host_use: workhours-host
+    apache:
+        http_redirect_to_ssl:    0
+    classes:
+        unattendedupgrades:
+
+
+dev:
+    # non-production internal-use-only machines that are used by our own developers
+    # On dev we try to auto-upgrade all packages. Should help us catch a lot of
+    #   problems nice and early.
+    package_ensure: latest
+    monitor: 1
+    nagios:
+        host_use: workhours-host
+    apache:
+        http_redirect_to_ssl:    0
+    classes:
+        unattendedupgrades:
+
+local:
+    # locally virtualized environment for testing of config changes by sysadmins
+    # simply keep e-mail in the local mailbox
+    server_admin_email: root@localhost
+    # to test mail01.local, change to:
+    # server_admin_email: root@example.org
+    server_location:    I'm right here. Where are you?
+    loghost:            log01.local
+    monitorhost:        172.16.88.11
+    domain:             local
+    monitor:            1
+    domain:             local
+    management:
+        exclude_environments:
+            - live
+            - project1
+            - test
+            - dev
+    apache:
+        ServerAdmin:             root@localhost
+        ServerName:              www.localhost
+        DocumentRoot:            /var/www
+        #SSLVerifyClient:         require
+        SSLCACertificateFile:    /usr/share/ca-certificates/local/ca.pem
+        #ssl_location_directives:
+        #    - "# Restrict access to this particular hosting environment only"
+        #    - SSLRequire
+        #      %{SSL_CLIENT_S_DN_CN} =~ m/^.+\.local$/i
+    pki:
+        ca_org:                  "Example Test Org"
+        ca_email:                root@localhost
+        ca_crl_dist_point:       https://ca.local.local/crl.pem
+    puppet:
+        # testing puppet 3...
+        use_puppetlabs_version:  1
+    #     version:                 3.0.1-1puppetlabs1
+    #     facter_version:          1.6.14-1puppetlabs1
+        version:                 latest
+        facter_version:          latest
+        enable_logging:          1
+    mail: 
+        smarthost: mail01.local
+    # nagios:
+    #     host_use: workhours-host
+    rsyslog:
+        # under VMware Fusion om Mac OS X, rsyslog complains about reverse DNS lookups
+        client_cert_validation:                   x509/certvalid
+        local_log:                                1
+    classes:
+        unattendedupgrades:
+
+deleted:
+    # machines that have been deleted
+    monitor: 0

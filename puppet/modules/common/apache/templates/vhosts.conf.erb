@@ -1,0 +1,79 @@
+# PUPPET
+# default site config, serves up /var/www docroot over SSL
+
+<% if apache['http_active'] == 1 %>
+<VirtualHost <%= apache['http_listener'] %>>
+    ServerName <%= apache['ServerName'] %>
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    <% if apache['http_redirect_to_ssl'] == 1 %>
+    Redirect / https://<%= apache['ServerName'] %>/
+    <% end %>
+
+    DocumentRoot <%= apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+</VirtualHost>
+<% end %>
+
+<% if apache['https_active'] == 1 %>
+<VirtualHost <%= apache['https_listener'] %>>
+    ServerName <%= apache['ServerName'] %>
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot <%= apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    <% if apache['SSLCertificateFile'] != nil %>
+        SSLCertificateFile    <%= apache['SSLCertificateFile'] %>
+    <% else %>
+        SSLCertificateFile    /etc/ssl/<%= clientcert %>_cert.pem
+    <% end %>
+    <% if apache['SSLCertificateKeyFile'] != nil %>
+        SSLCertificateKeyFile <%= apache['SSLCertificateKeyFile'] %>
+    <% else %>
+        SSLCertificateKeyFile /etc/ssl/<%= clientcert %>_key.pem
+    <% end %>
+    <% if apache['SSLCACertificateFile'] != nil %>
+        SSLCACertificateFile <%= apache['SSLCACertificateFile'] %>
+    <% end %>
+    <% if apache['SSLVerifyClient'] != nil %>
+        SSLVerifyClient <%= apache['SSLVerifyClient'] %>
+    <% end %>
+    
+    SSLEngine on
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+    <FilesMatch "\.(cgi|shtml|phtml|php)$">
+        SSLOptions +StdEnvVars
+    </FilesMatch>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+</VirtualHost>
+<% end %>

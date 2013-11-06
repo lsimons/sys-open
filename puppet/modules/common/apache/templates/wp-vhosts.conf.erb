@@ -1,0 +1,442 @@
+ServerSignature Off
+ServerTokens Prod
+
+###
+### non-wordpress hosting
+###
+# note: the non-wordpress sites have to come first, since otherwise the wordpress *.example.org wildcard will match...
+
+<% if apache['http_active'] == 1 %>
+<VirtualHost <%= apache['http_listener'] %>>
+    ServerName docs.example.org
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot /home/wp/www/docs
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/wp/www/docs>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+
+    <Directory /home/wp/www/docs/private>
+        AuthName "Secure Docs"
+        AuthType Basic
+        AuthUserFile /etc/sys/htpasswd
+        require valid-user
+    </Directory>
+</VirtualHost>
+
+# INFRA-298: webdav repo
+<VirtualHost <%= apache['http_listener'] %>>
+    ServerName repo.example.org
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot /home/cloudbees/repo
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/cloudbees/repo>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+</VirtualHost>
+<% end %><%# end if apache['http_active'] == 1 %>
+
+<% if apache['https_active'] == 1 %>
+# note: this has to come first, since otherwise the *.example.org wildcard will match...
+<VirtualHost <%= apache['https_listener'] %>>
+    ServerName docs.example.org
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot /home/wp/www/docs
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/wp/www/docs>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+
+    SSLEngine on
+    <% if apache['SSLCertificateFile'] != nil %>
+        SSLCertificateFile    <%= apache['SSLCertificateFile'] %>
+    <% else %>
+        SSLCertificateFile    /etc/ssl/<%= clientcert %>_cert.pem
+    <% end %>
+    <% if apache['SSLCertificateKeyFile'] != nil %>
+        SSLCertificateKeyFile <%= apache['SSLCertificateKeyFile'] %>
+    <% else %>
+        SSLCertificateKeyFile /etc/ssl/<%= clientcert %>_key.pem
+    <% end %>
+    <% if apache['SSLCACertificateFile'] != nil %>
+        SSLCACertificateFile <%= apache['SSLCACertificateFile'] %>
+    <% end %>
+    <FilesMatch "\.(cgi|shtml|phtml|php)$">
+        SSLOptions +StdEnvVars
+    </FilesMatch>
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+
+    # just to be sure...
+    UseCanonicalName Off
+</VirtualHost>
+
+# INFRA-298: webdav repo
+<VirtualHost <%= apache['https_listener'] %>>
+    ServerName repo.example.org
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot /home/cloudbees/repo
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/cloudbees/repo>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+
+    SSLEngine on
+    <% if apache['SSLCertificateFile'] != nil %>
+        SSLCertificateFile    <%= apache['SSLCertificateFile'] %>
+    <% else %>
+        SSLCertificateFile    /etc/ssl/<%= clientcert %>_cert.pem
+    <% end %>
+    <% if apache['SSLCertificateKeyFile'] != nil %>
+        SSLCertificateKeyFile <%= apache['SSLCertificateKeyFile'] %>
+    <% else %>
+        SSLCertificateKeyFile /etc/ssl/<%= clientcert %>_key.pem
+    <% end %>
+    <% if apache['SSLCACertificateFile'] != nil %>
+        SSLCACertificateFile <%= apache['SSLCACertificateFile'] %>
+    <% end %>
+    <FilesMatch "\.(cgi|shtml|phtml|php)$">
+        SSLOptions +StdEnvVars
+    </FilesMatch>
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+
+    # just to be sure...
+    UseCanonicalName Off
+</VirtualHost>
+<% end %><%# end if apache['https_active'] == 1 %>
+
+###
+### generic wordpress hosting
+###
+
+<% if apache['http_active'] == 1 %>
+<VirtualHost <%= apache['http_listener'] %>>
+    ServerName <%= apache['ServerName'] %>
+    ServerAlias <%= apache['ServerAlias'] %>
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot <%= apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    # just to be sure...
+    UseCanonicalName Off
+    
+    # BEGIN WordPress
+    <IfModule mod_rewrite.c>
+        <Directory <%= apache['DocumentRoot'] %>>
+            RewriteEngine On
+
+            # http://codex.wordpress.org/Administration_Over_SSL
+            RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /(.*)\ HTTP/ [NC]
+            RewriteCond %{HTTPS} !=on [NC]
+            RewriteRule ^/?(wp-admin/|wp-login\.php) https://%{SERVER_NAME}%{REQUEST_URI}%{QUERY_STRING} [R=301,QSA,L]
+                          
+            RewriteRule ^index\.php$ - [L]
+
+            # uploaded files
+            RewriteRule ^files/(.+) wp-includes/ms-files.php?file=$1 [L]
+
+            RewriteCond %{REQUEST_FILENAME} -f [OR]
+            RewriteCond %{REQUEST_FILENAME} -d
+            RewriteRule ^ - [L]
+            RewriteRule . index.php [L]
+        </Directory>
+    </IfModule>
+    # END WordPress
+    
+    # php_flag display_errors 1
+    # php_value error_reporting 8191
+</VirtualHost>
+<% end %><%# end if apache['http_active'] == 1 %>
+<% if apache['https_active'] == 1 %>
+<VirtualHost <%= apache['https_listener'] %>>
+    ServerName <%= apache['ServerName'] %>
+    ServerAlias <%= apache['ServerAlias'] %>
+    ServerAdmin <%= apache['ServerAdmin'] %>
+    
+    DocumentRoot <%= apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    SSLEngine on
+    <% if apache['SSLCertificateFile'] != nil %>
+        SSLCertificateFile    <%= apache['SSLCertificateFile'] %>
+    <% else %>
+        SSLCertificateFile    /etc/ssl/<%= clientcert %>_cert.pem
+    <% end %>
+    <% if apache['SSLCertificateKeyFile'] != nil %>
+        SSLCertificateKeyFile <%= apache['SSLCertificateKeyFile'] %>
+    <% else %>
+        SSLCertificateKeyFile /etc/ssl/<%= clientcert %>_key.pem
+    <% end %>
+    <% if apache['SSLCACertificateFile'] != nil %>
+        SSLCACertificateFile <%= apache['SSLCACertificateFile'] %>
+    <% end %>
+    <FilesMatch "\.(cgi|shtml|phtml|php)$">
+        SSLOptions +StdEnvVars
+    </FilesMatch>
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+
+    # just to be sure...
+    UseCanonicalName Off
+    
+    # BEGIN WordPress
+    <Directory <%= apache['DocumentRoot'] %>>
+        RewriteEngine On
+
+        RewriteRule ^index\.php$ - [L]
+
+        # uploaded files
+        RewriteRule ^files/(.+) wp-includes/ms-files.php?file=$1 [L]
+
+        RewriteCond %{REQUEST_FILENAME} -f [OR]
+        RewriteCond %{REQUEST_FILENAME} -d
+        RewriteRule ^ - [L]
+        RewriteRule . index.php [L]
+    </Directory>
+    # END WordPress
+    
+    # allow large file uploads (from ssl / admin interface only)
+    php_value upload_max_filesize 64M
+    php_value post_max_size 100M
+    php_value memory_limit 128M
+
+    # php_flag display_errors 1
+    # php_value error_reporting 8191
+</VirtualHost>
+<% end %><%# end if apache['https_active'] == 1 %>
+
+###
+### Custom domain name wordpress hosting
+###
+
+<% wordpress['sites'].each do |site| %>
+<%
+  ServerName = site['ServerName']
+  ServerAlias = site['ServerAlias']
+  ServerAdmin = site['ServerAdmin']
+  if ServerAdmin == nil
+    ServerAdmin = apache['ServerAdmin']
+  end
+  SSLCertificateFile = site['SSLCertificateFile']
+  if SSLCertificateFile == nil
+    SSLCertificateFile = apache['SSLCertificateFile']
+  end
+  if SSLCertificateFile == nil
+    SSLCertificateFile = '/etc/ssl/' + clientcert + '_cert.pem'
+  end
+  SSLCertificateKeyFile = site['SSLCertificateKeyFile']
+  if SSLCertificateKeyFile == nil
+    SSLCertificateKeyFile = apache['SSLCertificateKeyFile']
+  end
+  if SSLCertificateKeyFile == nil
+    SSLCertificateKeyFile = '/etc/ssl/' + clientcert + '_key.pem'
+  end
+  SSLCACertificateFile = site['SSLCACertificateFile']
+  if SSLCACertificateFile == nil
+    SSLCACertificateFile = apache['SSLCACertificateFile']
+  end
+%>
+
+<% if apache['http_active'] == 1 %>
+<VirtualHost *:80>
+    ServerName <%= ServerName %>
+    <% if ServerAlias != nil %>
+    ServerAlias <%= ServerAlias %>
+    <% end %>
+    ServerAdmin <%= ServerAdmin %>
+    
+    DocumentRoot /home/wp/www/current/public
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/wp/www/current/public>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    # force use of www. so that it works ok with ssl...
+    UseCanonicalName On
+    
+    # BEGIN WordPress
+    <IfModule mod_rewrite.c>
+        <Directory /home/wp/www/current/public>
+            RewriteEngine On
+
+            # http://codex.wordpress.org/Administration_Over_SSL
+            RewriteCond %{THE_REQUEST} ^[A-Z]{3,9}\ /(.*)\ HTTP/ [NC]
+            RewriteCond %{HTTPS} !=on [NC]
+            RewriteRule ^/?(wp-admin/|wp-login\.php) https://%{SERVER_NAME}%{REQUEST_URI}%{QUERY_STRING} [R=301,QSA,L]
+                          
+            RewriteRule ^index\.php$ - [L]
+
+            # uploaded files
+            RewriteRule ^files/(.+) wp-includes/ms-files.php?file=$1 [L]
+
+            RewriteCond %{REQUEST_FILENAME} -f [OR]
+            RewriteCond %{REQUEST_FILENAME} -d
+            RewriteRule ^ - [L]
+            RewriteRule . index.php [L]
+        </Directory>
+    </IfModule>
+    # END WordPress
+    
+    # php_flag display_errors 1
+    # php_value error_reporting 8191
+</VirtualHost>
+<% end %><%# end if apache['http_active'] == 1 %>
+<% if apache['https_active'] == 1 %>
+<VirtualHost *:443>
+    ServerName <%= ServerName %>
+    <% if ServerAlias != nil %>
+    ServerAlias <%= ServerAlias %>
+    <% end %>
+    ServerAdmin <%= ServerAdmin %>
+    
+    DocumentRoot /home/wp/www/current/public
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory /home/wp/www/current/public>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    SSLEngine on
+    SSLCertificateFile    <%= SSLCertificateFile %>
+    SSLCertificateKeyFile <%= SSLCertificateKeyFile %>
+    SSLCACertificateFile  <%= SSLCACertificateFile %>
+
+    <FilesMatch "\.(cgi|shtml|phtml|php)$">
+        SSLOptions +StdEnvVars
+    </FilesMatch>
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+
+    # force use of www. so that it works ok with ssl...
+    UseCanonicalName On
+    
+    # BEGIN WordPress
+    <Directory /home/wp/www/current/public>
+        RewriteEngine On
+
+        RewriteRule ^index\.php$ - [L]
+
+        # uploaded files
+        RewriteRule ^files/(.+) wp-includes/ms-files.php?file=$1 [L]
+
+        RewriteCond %{REQUEST_FILENAME} -f [OR]
+        RewriteCond %{REQUEST_FILENAME} -d
+        RewriteRule ^ - [L]
+        RewriteRule . index.php [L]
+    </Directory>
+    # END WordPress
+    
+    # allow large file uploads (from ssl / admin interface only)
+    php_value upload_max_filesize 64M
+    php_value post_max_size 100M
+    php_value memory_limit 128M
+
+    # php_flag display_errors 1
+    # php_value error_reporting 8191
+</VirtualHost>
+<% end %><%# end if apache['https_active'] == 1 %>
+
+<% end %><%# end wordpress['sites'].each %>

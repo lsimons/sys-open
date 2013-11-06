@@ -1,0 +1,34 @@
+#!/bin/bash
+# PUPPET 
+
+if [ $# -ne 1 ] ; then
+  echo "Checks whether a reboot is needed. Usage: $0 <hostname>"
+  echo ""
+  echo "    hostname: the host you aim to poll."
+  echo ""
+  echo "Example: $0 bigapeinc.com"
+  exit ${STATUS_UNKNONW}
+fi
+
+TARGET="$1"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+RESULT="`snmpget ${TARGET} 'NET-SNMP-EXTEND-MIB::nsExtendOutputFull."rebootrequired"'  -OvQ`"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+echo ${RESULT}
+
+if [[ "${RESULT}" == *"Reboot required"* ]]; then
+  exit ${STATUS_WARNING}
+elif [[ "${RESULT}" == *"latest"* ]]; then
+  exit ${STATUS_OK}
+else
+  exit ${STATUS_UNKNOWN}
+fi

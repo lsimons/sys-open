@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# this silly shell script is generated because looping over hashes in puppet is horrible...
+
+<% begin
+    apps = passenger_apps + php_apps + wsgi_apps + java_apps
+    apps.each do |app| %>
+        <% if app['postgres_enabled'] == 1 %>
+DBNAME=<%= app['postgres_database'] %>
+DBUSER=<%= app['postgres_user'] %>
+DBPASS=<%= app['postgres_password'] %>
+
+sudo -u postgres /usr/bin/psql -c '\du' | egrep "^ *$DBUSER" > /dev/null
+if [[ $? -ne 0 ]]; then
+    sudo -u postgres /usr/bin/createuser -S -D -R "$DBUSER"
+fi
+
+sudo -u postgres /usr/bin/psql -c "ALTER USER ${DBUSER} PASSWORD '${DBPASS}';"
+
+sudo -u postgres /usr/bin/psql -l | egrep "^ *$DBNAME" > /dev/null
+if [[ $? -ne 0 ]]; then
+    sudo -u postgres /usr/bin/createdb -O "$DBUSER" "$DBNAME" --template template0 --encoding utf8
+fi
+        <% end %>
+    <% end %>
+<% rescue NameError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps undefined
+<% rescue NoMethodError %>
+    echo WARNING: passenger_apps or wsgi_apps or php_apps or java_apps not iterable
+<% end %>

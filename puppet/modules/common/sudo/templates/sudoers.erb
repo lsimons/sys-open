@@ -1,0 +1,35 @@
+# PUPPET
+# /etc/sudoers
+#
+# This file MUST be edited with the 'visudo' command as root.
+#
+# See the man page for details on how to write a sudoers file.
+#
+
+# Defaults  env_reset
+Defaults        env_keep += "SVN_SSH SSH_AUTH_SOCK"
+
+# Host alias specification
+
+# User alias specification
+
+# Cmnd alias specification
+# All puppet related stuff goes into PUPPET:
+Cmnd_Alias PUPPET = /usr/bin/puppet agent -t, /usr/bin/puppet agent -t --noop\
+                        /usr/bin/puppet agent --noop -t, \
+                        /usr/bin/puppet agent --noop, \
+                        /usr/local/bin/puppetrun
+
+# User privilege specification
+root      ALL=(ALL) ALL
+
+# Allow members of group sudo to execute any command after they have
+# provided their password
+%sudo     ALL=(ALL) ALL
+
+# Allow members of group sudo to execute 'puppet agent' without entering
+# a password
+%sudo     ALL = NOPASSWD: PUPPET
+
+#
+#includedir /etc/sudoers.d

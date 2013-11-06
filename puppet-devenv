@@ -1,0 +1,142 @@
+#!/bin/bash
+
+# I clone virtualbox VMs and turn them into nice little throwaway puppets.
+# I could be vagrant. But am not. However, I'm not very neat either.
+
+# Who is our puppet master?:
+PUPPETMASTER="puppet"
+
+# What is the IP of the puppetmaster:
+PUPPETMASTER_IP="172.16.88.10"
+
+# What is the new IP of the clone?:
+NEWIP="$3"
+
+# What is our DNS?:
+DNS="172.16.88.10"
+
+# This is the VM we're going to be cloning:
+MASTERVM="ubuntu-12.04-server-i386"
+
+# The script that gets executed at boottime on the new clone:
+INITSCRIPT="/home/ubuntu/sys/puppet/modules/common/puppetmaster/files/init.sh"
+
+# Automagically find where our VMs are stored by default:
+VMHOME="`grep SystemProperties ~/.VirtualBox/VirtualBox.xml | grep defaultMachineFolder | cut -d '=' -f 2  | cut -d '"' -f 1-2| sed -e 's/\"//g'`"
+
+# Automagically create a temporary folder we can use for mounting stuff.
+TMPDIR="`mktemp -d`"
+
+
+# ----------------------------------------------
+#    NO VARIABLES PAST THIS POINT
+# ----------------------------------------------
+
+function newclient() {
+# Clone puppet client: 
+    echo ""
+    if [[ $1 == "" ]] ; then
+        echo -n "What name for the new puppet? "
+        read NEWHOST
+        echo -n "What ipaddress for the new puppet called $NEWHOST? "
+        read NEWIP
+    else 
+        NEWHOST=$1
+    fi 
+
+    echo "Starting clone of ${MASTERVM} to ${NEWHOST}"
+    VBoxManage clonevm ${MASTERVM} --register --name "${NEWHOST}"
+    echo "Setting nic1 to nat"
+    VBoxManage modifyvm ${NEWHOST} --nic1 nat
+    echo "Start with:"
+    echo "Preparing client..."
+    prepclient ${NEWHOST} ${NEWIP}
+    echo "VBoxHeadless -s ${NEWHOST}"
+    echo "Wait about 2 minutes, then ping ${NEWIP}"
+}
+
+function prepclient() {
+# Prepare a client for boot. 
+# Basically mount the imagefile, copy init.sh over and umount again.
+
+  NEWHOST="$1"
+  NEWIP="$2"
+
+  mkdir -p ${TMPDIR}/{vdi,loop} || exit 1
+  vdfuse  -f "${VMHOME}/${NEWHOST}/${NEWHOST}.vdi" ${TMPDIR}/vdi || exit 1
+  echo "Need sudo to mount!"
+  sudo mount -o loop ${TMPDIR}/vdi/Partition1 ${TMPDIR}/loop || exit 1
+  # Adding puppet to hosts file
+  echo "Adding puppetmaster host + ip to hosts file on new clone."
+  sudo su -c "echo ${PUPPETMASTER_IP} ${PUPPETMASTER} >> ${TMPDIR}/loop/etc/hosts"  || exit 1
+
+  # Make sure our script gets executed on the new host:
+  # FIXME: Huh? Why not just copy init.sh to /etc/rc.local?!
+  echo "Adding init.sh to rc.local"
+  sudo su -c "echo '#!/bin/bash' > ${TMPDIR}/loop/etc/rc.local"  || exit 1
+  sudo su -c "echo bash /var/tmp/init.sh >> ${TMPDIR}/loop/etc/rc.local"  || exit 1
+  sudo su -c "echo exit 0 >> ${TMPDIR}/loop/etc/rc.local"  || exit 1
+
+  # Set root password to 'ubuntu'. Rememer to make that more sane (or remove
+  # it) if you actually do anything production-worthy with any of these
+  # machines.
+  echo "Setting root password to 'ubuntu'. Eek!"
+  sudo sed -i 's/root:!:/root:\$6\$Lmv7oKwF$4RaRKFhlgVW0jU0iYhV9WHdg9sce\/ls5IZIUoFrUElBWqJk6IeI0u6ktoIybntRGoXWR63\.9VX6m5X65KWqkH\.:/g' ${TMPDIR}/loop/etc/shadow
+
+  
+  # Udev will cause booting delays after a clone. Fixing:
+  echo "Cleaning up 70-persistent-net.rules"
+  sudo su -c "rm -f ${TMPDIR}/loop/etc/udev/rules.d/70-persistent-net.rules" || exit 1
+
+  # There could be a stupid lock here. Remove it.
+  echo "Cleaning up a lock file from apt."
+  sudo su -c "rm -f ${TMPDIR}/loop/var/lib/dpkg/lock" || exit 1
+
+  echo "Copying over bootstrap script to new clone (${NEWHOST})."
+  cat $INITSCRIPT | sed -e "s/=REPLACEME_DNS/=${DNS}/" -e "s/=REPLACEME_IP/=${NEWIP}/" -e "s/=REPLACEME_PUPPETNAME/=${NEWHOST}/" > ${TMPDIR}/loop/var/tmp/init.sh || exit 1
+
+  # We need to sleep or else umount barfs.
+  sync
+  sync
+  sync
+  sleep 1 && echo 1...
+  sleep 1 && echo 2..
+  sleep 1 && echo 3.
+  echo "Need sudo to umount ${TMPDIR}/loop!"
+  sudo umount ${TMPDIR}/loop || exit 1
+  sudo umount ${TMPDIR}/vdi || exit 1
+}
+
+if [ $# -lt 1 ] ; then
+  echo "Usage:"
+  echo "  $0 add|prep [new_host] [new_ipaddress]"
+  echo ""
+  echo "Example:"
+  echo "  $0 add pup15 172.16.88.12"
+  echo "  $0 prep pup7 172.16.88.13"
+  echo ""
+  exit 0
+fi
+
+if [[ $1 == 'add' ]] ; then
+    newclient $2
+elif [[ $1 == 'prep' ]] ; then
+    prepclient $2 $NEWIP
+fi
+
+echo ""
+echo "----------------------"
+echo "    List of VMs       "
+echo "----------------------"
+VBoxManage list vms
+echo "----------------------"
+echo ""
+
+echo "You could start your VM with:"
+echo "VBoxHeadless -s ${NEWHOST}"
+echo ""
+echo "Or you could start VirtualBox and start it up by double clicking on it."
+
+echo Done.
+
+exit 0

@@ -1,0 +1,109 @@
+# PUPPET
+
+<% if @apache['http_active'] == 1 %>
+<VirtualHost <%= @apache['http_listener'] %>>
+    ServerName <%= @apache['ServerName'] %>
+    ServerAdmin <%= @apache['ServerAdmin'] %>
+    
+    <% if @apache['http_redirect_to_ssl'] == 1 %>
+    Redirect / https://<%= @apache['ServerName'] %>/
+    <% end %>
+
+    DocumentRoot <%= @apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= @apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        Order allow,deny
+        allow from all
+    </Directory>
+</VirtualHost>
+<% end %>
+
+<% if @apache['https_active'] == 1 %>
+<VirtualHost <%= @apache['https_listener'] %>>
+    ServerName <%= @apache['ServerName'] %>
+    ServerAdmin <%= @apache['ServerAdmin'] %>
+    
+    DocumentRoot <%= @apache['DocumentRoot'] %>
+    <Directory />
+        Options FollowSymLinks
+        AllowOverride None
+    </Directory>
+    <Directory <%= @apache['DocumentRoot'] %>>
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+        Order allow,deny
+        allow from all
+    </Directory>
+    
+    <Directory /home/reprepro/repos>
+        Options Indexes FollowSymLinks Multiviews
+        Order allow,deny
+        # unfortunately this does not work:
+        #   http://www.mail-archive.com/debian-user@lists.debian.org/msg602593.html
+        # SSLVerifyClient require
+        # <% if @apache['allow_only'] != nil %>
+        # Allow from <%= @apache['allow_only'] %>
+        # <% else %>
+        # Allow from all
+        # <% end %>
+        Allow from all
+        AuthName "Apt"
+        AuthType Basic
+        AuthUserFile /etc/sys/htpasswd
+        require valid-user
+
+        IndexOptions +SuppressHTMLPreamble
+        HeaderName .HEADER.html
+    </Directory>
+    <Directory /home/reprepro/repos/*/db>
+        Options Indexes FollowSymLinks Multiviews
+        Order allow,deny
+        Deny from all
+    </Directory>
+    <Directory /home/reprepro/repos/*/conf>
+        Options Indexes FollowSymLinks Multiviews
+        Order allow,deny
+        Deny from all
+    </Directory>
+    Alias /repos /home/reprepro/repos
+    
+    # allow large file uploads (from ssl / admin interface only)
+    php_value upload_max_filesize 256M
+    php_value post_max_size 300M
+    php_value memory_limit 128M
+    
+    SSLEngine on
+    <% if @apache['SSLCertificateFile'] != nil %>
+        SSLCertificateFile    <%= @apache['SSLCertificateFile'] %>
+    <% else %>
+        SSLCertificateFile    /etc/ssl/<%= @clientcert %>_cert.pem
+    <% end %>
+    <% if @apache['SSLCertificateKeyFile'] != nil %>
+        SSLCertificateKeyFile <%= @apache['SSLCertificateKeyFile'] %>
+    <% else %>
+        SSLCertificateKeyFile /etc/ssl/<%= @clientcert %>_key.pem
+    <% end %>
+    <% if @apache['SSLCACertificateFile'] != nil %>
+        SSLCACertificateFile <%= @apache['SSLCACertificateFile'] %>
+    <% end %>
+    SSLOptions +StdEnvVars
+    <Location />
+      SSLRequire %{SSL_CIPHER_USEKEYSIZE} >= 128
+      <% @apache['ssl_location_directives'].each do |rule| %>
+      <%= rule %>
+      <% end %>
+    </Location>
+
+    BrowserMatch "MSIE [2-6]" \
+        nokeepalive ssl-unclean-shutdown \
+        downgrade-1.0 force-response-1.0
+    BrowserMatch "MSIE [17-9]" ssl-unclean-shutdown
+</VirtualHost>
+<% end %>

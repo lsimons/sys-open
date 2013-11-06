@@ -1,0 +1,234 @@
+<?php // -*- php -*-
+
+// simple web form for promoting packages
+
+$pool           = "<%= repodir %>/pool/devel";
+$main           = "<%= repodir %>/pool/main";
+$promodir       = "<%= promodir %>";
+$request_method = $_SERVER['REQUEST_METHOD'];
+
+$debFileNameRegex = "/^[a-z0-9][a-z0-9\+\-\.]+_[a-z0-9\+\-\.\_:]+\.deb$/i";
+
+function starts_with($haystack, $needle) {
+    return !strncmp($haystack, $needle, strlen($needle));
+}
+
+function ends_with($haystack, $needle) {
+    $length = strlen($needle);
+    if ($length == 0) {
+        return true;
+    }
+
+    return (substr($haystack, -$length) === $needle);
+}
+
+function bad_request($message) {
+    header("HTTP/1.1 400 Bad Request");
+    exit($message);
+}
+
+function internal_server_error($message) {
+    header("HTTP/1.1 500 Internal Server Error");
+    exit($message);
+}
+
+if ($request_method == "POST") {
+    header("Content-Type: text/plain"); 
+    
+    if (!array_key_exists("package", $_POST)) {
+        bad_request("Missing package form variable");
+    }
+    $package = $_POST["package"];
+
+    if($package != realpath($package)) {
+        bad_request("Expected absolute path");
+    }
+    if (!starts_with($package, $pool)) {
+        bad_request("That package is not in the (right) pool");
+    }
+    if (!is_file($package)) {
+        bad_request("No such package file");
+    }
+    
+    if (!array_key_exists("entry", $_POST)) {
+        bad_request("Missing entry form variable");
+    }
+    $entry = $_POST["entry"];
+    
+    if (!preg_match($debFileNameRegex, $entry)) {
+        bad_request("entry filename does not match rules");
+    }
+    if (!ends_with($package, $entry)) {
+        bad_request("package path does not end with entry filename");
+    }
+    
+    $promofile = $promodir . "/" . $entry . ".promote";
+    if (is_file($promofile)) {
+        echo "Promotion already scheduled";
+    } else {
+        $fp = fopen($promofile, 'w');
+        if (!$fp) {
+            header("HTTP/1.1 500 Internal Server Error");
+            print_r(error_get_last());
+            echo "\n";
+            exit("Cannot write $promofile");
+        }
+        $written = fwrite($fp, $package);
+        if (!$written) {
+            header("HTTP/1.1 500 Internal Server Error");
+            print_r(error_get_last());
+            echo "\n";
+            exit("Cannot write to $promofile");
+        }
+        $closed = fclose($fp);
+        if (!$closed) {
+            header("HTTP/1.1 500 Internal Server Error");
+            print_r(error_get_last());
+            echo "\n";
+            exit("Cannot close $promofile");
+        }
+        if (!chmod($promofile, 0664)) {
+            header("HTTP/1.1 500 Internal Server Error");
+            exit("Unable to chmod created file.");
+        };
+        echo "OK";
+    }
+} else {
+?>
+<!doctype html>
+<!--[if lt IE 7 ]> <html class="ie6"> <![endif]-->
+<!--[if IE 7 ]>    <html class="ie7"> <![endif]-->
+<!--[if IE 8 ]>    <html class="ie8"> <![endif]-->
+<!--[if IE 9 ]>    <html class="ie9"> <![endif]-->
+<!--[if (gt IE 9)|!(IE)]><!--> <html class=""> <!--<![endif]-->
+<html xmlns="http://www.w3.org/1999/xhtml" dir="ltr" lang="en-US" xml:lang="en-US">
+<head profile="http://gmpg.org/xfn/11">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="distribution" content="global" />
+    <meta name="language" content="en-US" />
+    <!-- Set the viewport width to device width for mobile -->
+    <meta name="viewport" content="initial-scale=1.0; maximum-scale=1.0; width=device-width"/>
+    <title>Promote Debian Package</title>
+
+    <link rel='stylesheet' id='foundation-css'  href='http://community.example.org/wp-content/themes/business-lite/core/css/foundation.css?ver=3.4.2' type='text/css' media='all' />
+    <link rel='stylesheet' id='foundation_apps-css'  href='http://community.example.org/wp-content/themes/business-lite/core/css/app.css?ver=3.4.2' type='text/css' media='all' />
+    <link rel='stylesheet' id='shortcode-css'  href='http://community.example.org/wp-content/themes/business-lite/css/shortcode.css?ver=3.4.2' type='text/css' media='all' />
+    <link rel='stylesheet' id='business_style-css'  href='http://community.example.org/wp-content/themes/business-lite/css/style.css?ver=3.4.2' type='text/css' media='all' />
+    <link rel='stylesheet' id='elements-css'  href='http://community.example.org/wp-content/themes/business-lite/css/elements.css?ver=3.4.2' type='text/css' media='all' />
+    <link rel='stylesheet' id='color-css'  href='http://community.example.org/wp-content/themes/business-lite/css/color/light.css?ver=3.4.2' type='text/css' media='all' />
+    <style type="text/css" media="screen">
+        table {
+            width: 100% !important;
+        }
+    
+        th {
+            text-align: left !important;
+        }
+    </style>
+</head>
+    <body style="font-family:Arial, Helvetica, serif" class="page page-id-21 page-template-default">
+        <div class="wrapper">
+            <header>
+                <div id="header">
+                    <div class="container">
+                        <div class="row">
+                            <div class="twelve columns">
+                                <h2 class="posts_title">
+                                    Promote Debian Package
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <div class="container">
+                <div style="margin: 3em">
+                    <div style="padding: 3em; margin-top: 2em; border: 1px solid grey; border-radius: 1em;">
+<?php
+    if (array_key_exists("path", $_GET)) {
+        $path = $_GET["path"];
+    } else {
+        $path = "";
+    }
+    
+    if ($path != "") {
+        ?>
+                        <a href="javascript:history.go(-1);">&lt;&lt;</a><br>
+        <?php
+    }
+    
+    $dir = realpath($pool . "/" . $path);
+    if (!starts_with($dir, $pool)) {
+        bad_request("Illegal path");
+    }
+    
+    if (!is_dir($dir)) {
+        bad_request("Not a directory");
+    }
+    
+    $entries = scandir($dir);
+    foreach ($entries as $entry) {
+        $entrypath = $path . "/" . $entry;
+        $entrydir = realpath($dir . "/" . $entry);
+        if (!is_dir($entrydir)) {
+            continue;
+        }
+        if (!starts_with($entrydir, $pool)) {
+            continue;
+        }
+        if ($entry == "." or $entry == "..") {
+            continue;
+        }
+        ?>
+        <a href="?path=<?php echo urlencode($entrypath); ?>"><?php echo $entry; ?></a><br>
+        <?php
+    } // end foreach
+
+    $self = $_SERVER['PHP_SELF'];
+
+    foreach ($entries as $entry) {
+        $entryfile = realpath($dir . "/" . $entry);
+        if (!starts_with($entryfile, $pool)) {
+            continue;
+        }
+        if (!is_file($entryfile)) {
+            continue;
+        }
+        if (!preg_match($debFileNameRegex, $entry)) {
+            continue;
+        }
+        $mainfile = str_replace($pool, $main, $entryfile);
+        if (is_file($mainfile)) {
+            ?>
+                        <div><em><?php echo $entry; ?> is already in main</em></div>
+            <?php
+        } else {
+            ?>
+                        <div><form enctype="multipart/form-data" action="<?php echo $self; ?>" method="POST">
+                            <input type="hidden" name="package" value="<?php echo $entryfile; ?>">
+                            <input type="hidden" name="entry" value="<?php echo $entry; ?>">
+                            <input type="submit" name="submit" value="Promote <?php echo $entry; ?>">
+                        </form></div>
+            <?php
+        }
+    } // end foreach
+?>
+
+                        <p>
+                            To promote packages programmatically, you can do something like:
+                        </p>
+                        <pre>
+curl -u apt:XXX \
+    -F package=/home/reprepro/repos/ex/pool/devel/a/aalib/libaa-bin_1.4p5-38build1_amd64.deb \
+    -F entry=libaa-bin_1.4p5-38build1_amd64.deb \
+    https://<?php echo $server_name; ?><?php echo $self; ?>
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>
+
+<?php } // end else

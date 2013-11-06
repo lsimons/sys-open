@@ -1,0 +1,6 @@
+# PUPPET
+
+deb https://apt:<%= apt['password'] %>@<%= apache['ServerName'] %>/repos/<%= publish_name %> <%= codename %> main
+<% if env == "dev" %>
+deb https://apt:<%= apt['password'] %>@<%= apache['ServerName'] %>/repos/<%= publish_name %> <%= codename %> devel
+<% end %>

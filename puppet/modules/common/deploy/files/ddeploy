@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# simple shell script used to deploy Debian packages
+#
+# usage:
+#  ssh root@... -C /usr/local/bin/ddeploy < package.deb
+#
+# after deploying an e-mail is send to dev@old.example.com
+#
+
+set -e
+
+function die
+{
+    echo -e "*** ERROR ***" >&2
+    echo -e "$1" >&2
+    echo "" >&2
+    exit 1
+}
+
+# temporary storage for package
+TEMP=$(mktemp)
+
+# temporary storage for email
+OUTPUT=$(mktemp)
+
+[[ -z $TEMP ]] && die "Empty tempdir"
+
+# store package
+cat > $TEMP
+
+# build email
+SOURCE=${SSH_CONNECTION%% *}
+echo -n "Someone from " > $OUTPUT
+host $SOURCE | head -n 1 | awk '{printf $NF}' >> $OUTPUT
+echo " ($SOURCE) installed: " >> $OUTPUT
+echo "-----------------------------------------" >> $OUTPUT
+dpkg-deb -I $TEMP >> $OUTPUT
+echo "-----------------------------------------" >> $OUTPUT
+
+# install package
+DEBIAN_FRONTEND=noninteractive dpkg --force-confnew -i $TEMP 2>&1 | tee -a $OUTPUT
+
+# more building email
+PACKAGE=$(dpkg-deb --showformat='${Package} ${Version}' -W $TEMP)
+HOST=$(hostname)
+echo "" >> $OUTPUT
+
+# sending email
+cat $OUTPUT | mail -s "[ddeploy] $PACKAGE deployed to $HOST" dev@old.example.com
+
+# cleaning up
+rm $TEMP
+rm $OUTPUT
+
+echo "*** deployment complete ***"

@@ -1,0 +1,41 @@
+#!/bin/bash
+# PUPPET 
+
+if [ $# -ne 3 ] ; then
+  echo "Checks whether puppet ran recently. Usage: $0 <hostname> <warn> <crit>"
+  echo ""
+  echo "    hostname: the host you aim to poll."
+  echo "    warn    : max nr of secs before nagios considers it a warning."
+  echo "    crit    : max nr of seconds before nagios starts crit-ing."
+  echo ""
+  echo "Example: $0 bigapeinc.com 1024 919308"
+  exit ${STATUS_UNKNONW}
+fi
+
+TARGET="$1"
+WARN="$2"
+CRIT="$3"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+RESULT="`snmpget -OvQ ${TARGET} 'NET-SNMP-EXTEND-MIB::nsExtendOutLine."puppet_freshness".1'`"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+if [[ ${RESULT} -gt ${CRIT} ]]  ; then
+  echo "PUPPET CRITICAL: last run was ${RESULT}s ago > ${CRIT}s"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [[ ${RESULT} -gt ${WARN} ]] ; then
+  echo "PUPPET WARNING: last run was ${RESULT}s ago > ${WARN}s"
+  exit ${STATUS_WARNING}
+fi
+
+echo "PUPPET OK: last run was ${RESULT}s ago"
+exit ${STATUS_OK}

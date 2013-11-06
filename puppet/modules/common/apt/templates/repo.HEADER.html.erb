@@ -1,0 +1,23 @@
+<h1><%= publish_name.upcase %> package repository</h1>
+
+<p>This is a debian package repository built using <a href="http://packages.ubuntu.com/precise/reprepro">reprepro</a>.</p>
+
+<h2>Package management</h2>
+<p>Use <a href="app/upload.php">the upload tool</a> to add packages to the devel component. Note new uploads are picked up by a cron job, so you will have to wait up to 5 minutes for newly uploaded packages to become available. If you have SSH access to the machine this package is hosted on, you can run <code>sudo -u reprepro <%= includedebs %></code> to run the cron job manually, and you can also add packages directly on the machine by putting them in <code><%= incomingdir %></code>.</p>
+
+<p>Then, use <a href="app/promote.php">the promotion tool</a> to promote packages from devel into the main component. Note new promotions are picked up by a cron job, so you will have to wait up to 5 minutes for packages to be promoted. You can only promote packages that already exist in devel; you cannot add packages directly to main. If you have SSH access to the machine this package is hosted on, you can run <code>sudo -u reprepro <%= promotedebs %></code> to run the cron job manually.</p>
+
+<h2>Repository usage</h2>
+<p>To use this package repository, add a file named <code>/etc/apt/sources.list.d/${publish_name}.list</code> with contents like:</p>
+
+<pre>  
+deb https://apt:XXX@<%= apache['ServerName'] %>/repos/<%= publish_name %> <%= codename %> main
+# uncomment to use devel packages
+# deb https://apt:XXX@<%= apache['ServerName'] %>/repos/<%= publish_name %> <%= codename %> devel
+</pre>
+
+<p>Make sure to replace XXX with the password used to access the repository (it is the same password you used to be able to see this page). You should also import <a href="<%= key_name %>.gpg.key"><%= key_name %>.gpg.key</a> using <code>apt-key add <%= key_name %>.gpg.key</code>.</p>
+
+<p>(Note that on our own server machines this repository is enabled automatically via puppet, so you do not have to do anything.)</p>
+
+<p>You can also browse the repository below, for example to manually download packages from the <a href="pool/">pool</a>.</p>

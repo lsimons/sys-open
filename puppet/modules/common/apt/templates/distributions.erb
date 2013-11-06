@@ -1,0 +1,10 @@
+Origin: <%= apache['ServerName'] %>
+Label: apt repository
+Codename: <%= codename %>
+Architectures: amd64 i386 source
+Components: main devel
+Description: <%= server_admin_name %> debian package repo
+SignWith: yes
+Pull: precise
+
+

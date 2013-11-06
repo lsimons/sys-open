@@ -1,0 +1,9 @@
+<IfModule passenger_module>
+  PassengerRoot <%= rvm_passenger_gem_path %>
+  PassengerRuby <%= ruby_cmd %>
+  PassengerMaxPoolSize <%= maxpoolsize %>
+  PassengerPoolIdleTime <%= poolidletime %>
+  PassengerMinInstances <%= mininstances %>
+  PassengerMaxInstancesPerApp <%= maxinstancesperapp %>
+  PassengerSpawnMethod <%= spawnmethod %>
+</IfModule>

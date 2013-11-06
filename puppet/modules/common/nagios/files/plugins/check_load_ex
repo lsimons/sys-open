@@ -1,0 +1,86 @@
+#!/bin/bash
+
+if [ $# -ne 3 ] ; then
+  echo "Checks system load. Usage: $0 <hostname> <warn> <crit>"
+  echo ""
+  echo "    hostname: the host you aim to poll."
+  echo "    warn    : at what load level should nagios give warning?"  
+  echo "    crit    : at what load level should nagios call you at home?"
+  echo ""
+  echo "Example: $0 bigapeinc.com 80 95"
+  exit ${STATUS_UNKNONW}
+fi
+
+TARGET="$1"
+WARN="$2"
+CRIT="$3"
+
+STATUS_OK=0
+STATUS_WARNING=1
+STATUS_CRITICAL=2
+STATUS_UNKNOWN=3
+
+LOAD="`snmpget ${TARGET} .1.3.6.1.4.1.2021.10.1.3.1  .1.3.6.1.4.1.2021.10.1.3.2  .1.3.6.1.4.1.2021.10.1.3.3 -OvQ`"
+# FOR QUICK DEBUG, UNCOMMENT:
+#LOAD="10.12 5.23 2.40"
+
+if [[ $? -gt 0 ]] ; then
+  echo "Error getting result!" && exit ${STATUS_UNKNOWN}
+fi
+
+# Output the snmp result to a tmpfile:
+TMP=`mktemp`
+echo $LOAD > $TMP || exit 2
+
+ONE_MIN_AVG=`cat ${TMP} | cut -d ' ' -f 1 | cut -d '.' -f 1`
+FIVE_MIN_AVG=`cat ${TMP} | cut -d ' ' -f 2 | cut -d '.' -f 1`
+FIFTEEN_MIN_AVG=`cat ${TMP} | cut -d ' ' -f 3 | cut -d '.' -f 1`
+
+if [ -e ${TMP} ] ; then 
+  rm -rf ${TMP} ; 
+else 
+  echo "${TMP} seems to have vanished!" ;  
+  exit ${STATUS_UNKNOWN}; 
+fi
+
+
+# Poorly parse the options:
+WARN_ONE_MIN_AVG="`echo ${WARN} | cut -d ',' -f 1 | cut -d '.' -f 1`"
+WARN_FIVE_MIN_AVG="`echo ${WARN} | cut -d ',' -f 2 | cut -d '.' -f 1`"
+WARN_FIFTEEN_MIN_AVG="`echo ${WARN} | cut -d ',' -f 3 | cut -d '.' -f 1`"
+CRIT_ONE_MIN_AVG="`echo ${CRIT} | cut -d ',' -f 1 | cut -d '.' -f 1`"
+CRIT_FIVE_MIN_AVG="`echo ${CRIT} | cut -d ',' -f 2 | cut -d '.' -f 1`"
+CRIT_FIFTEEN_MIN_AVG="`echo ${CRIT} | cut -d ',' -f 3 | cut -d '.' -f 1`"
+
+if [ ${FIFTEEN_MIN_AVG} -gt ${CRIT_FIFTEEN_MIN_AVG} ] ; then
+  echo "LOAD CRITICAL: ${FIFTEEN_MIN_AVG} > ${CRIT_FIFTEEN_MIN_AVG}"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [ ${FIVE_MIN_AVG} -gt ${CRIT_FIVE_MIN_AVG} ] ; then
+  echo "LOAD CRITICAL: ${FIVE_MIN_AVG} > ${CRIT_FIVE_MIN_AVG}"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [ ${ONE_MIN_AVG} -gt ${CRIT_ONE_MIN_AVG} ] ; then
+  echo "LOAD CRITICAL: ${ONE_MIN_AVG} > ${CRIT_ONE_MIN_AVG}"
+  exit ${STATUS_CRITICAL}
+fi
+
+if [ ${FIFTEEN_MIN_AVG} -gt ${WARN_FIFTEEN_MIN_AVG} ] ; then
+  echo "LOAD WARNING: ${FIFTEEN_MIN_AVG} > ${WARN_FIFTEEN_MIN_AVG}"
+  exit ${STATUS_WARNING}
+fi
+
+if [ ${FIVE_MIN_AVG} -gt ${WARN_FIVE_MIN_AVG} ] ; then
+  echo "LOAD WARNING: ${FIVE_MIN_AVG} > ${WARN_FIVE_MIN_AVG}"
+  exit ${STATUS_WARNING}
+fi
+
+if [ ${ONE_MIN_AVG} -gt ${WARN_ONE_MIN_AVG} ] ; then
+  echo "LOAD WARNING: ${ONE_MIN_AVG} > ${WARN_ONE_MIN_AVG}"
+  exit ${STATUS_WARNING}
+fi
+
+echo "LOAD OK: 1m:${ONE_MIN_AVG} 5m:${FIVE_MIN_AVG} 15m:${FIFTEEN_MIN_AVG}"
+exit ${STATUS_OK}

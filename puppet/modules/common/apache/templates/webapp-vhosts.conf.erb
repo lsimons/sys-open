@@ -1,0 +1,266 @@
+# PUPPET
+<%-
+    def allow(dir, multiViews=false)
+      # multiviews needs to be explicitly false for rack apps...
+      # http://www.modrails.com/documentation/Users%20guide%20Apache.html#deploying_rack_to_sub_uri
+      if multiViews
+        multiViews = "MultiViews"
+      else
+        multiViews = "-MultiViews"
+      end
+      return <<-EOS
+        <Directory "#{dir}">
+            Options           Indexes FollowSymLinks #{multiViews}
+            AllowOverride     None
+            Order             allow,deny
+            allow             from all
+        </Directory>
+      EOS
+    end
+
+    def docroot(root, multiViews=false)
+      result = <<-EOS
+        DocumentRoot          "#{root}"
+      EOS
+      result += allow(root, multiViews=multiViews)
+    end
+
+    def ssl(apache)
+      rules = ""
+      apache['ssl_location_directives'].each do |rule|
+        rules += "          " + rule + "\n"
+      end
+      verifyClient = apache['SSLVerifyClient']
+      if verifyClient == nil
+        verifyClient = "none"
+      end
+
+      return <<-EOS
+        SSLEngine on
+        SSLOptions            +StdEnvVars
+        <Location />
+          SSLRequire          %{SSL_CIPHER_USEKEYSIZE} >= 128
+#{rules}
+        </Location>
+
+        BrowserMatch          "MSIE [2-6]" \\
+            nokeepalive ssl-unclean-shutdown \\
+            downgrade-1.0 force-response-1.0
+        BrowserMatch          "MSIE [17-9]" \\
+            ssl-unclean-shutdown
+
+        # allow clients to provide an SSL certificate, and set headers
+        #   based on that certificate if provided
+        SSLVerifyClient       #{verifyClient}
+        SSLVerifyDepth        2
+        RequestHeader set SSL_CLIENT_S_DN "%{SSL_CLIENT_S_DN}s"
+        RequestHeader set SSL_CLIENT_S_DN_CN "%{SSL_CLIENT_S_DN_CN}s"
+        RequestHeader set SSL_CLIENT_I_DN "%{SSL_CLIENT_I_DN}s"
+        RequestHeader set SSL_CLIENT_I_DN_CN "%{SSL_CLIENT_I_DN_CN}s"
+
+        # try to set X-Originating-System-Id based on client certificate, if no other value has been provided
+        SetEnvIf X-Originating-System-Id ".+" know_system_id
+        RequestHeader set X-Originating-System-Id "%{SSL_CLIENT_S_DN_CN}e"  env=!know_system_id
+      EOS
+    end
+
+    def is_true?(var)
+      # default (nil) interpreted as true
+      return [nil, 1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+    def is_strictly_true?(var)
+      # default (nil) interpreted as false
+      return [1, 'true', 'True', 'TRUE', true].include?(var)
+    end
+
+    def ssl_proxy_settings(clientcert)
+      return <<-EOS
+        # note we are connecting to https tomcat iff the connection to us was also secure
+        # http://httpd.apache.org/docs/2.2/mod/mod_ssl.html#sslproxycacertificatefile
+        SSLProxyCACertificateFile      /usr/share/ca-certificates/local/ca.pem
+        SSLProxyCARevocationFile       /usr/share/ca-certificates/local/crl.pem
+        SSLProxyCheckPeerCN            off
+        SSLProxyCheckPeerExpire        on
+        SSLProxyCipherSuite            AES+SHA256+RSA:AES+SHA+RSA:AES+SHA+DH:AES+SHA256+DH:!COMPLEMENTOFDEFAULT:!COMPLEMENTOFALL
+        SSLProxyEngine                 on
+        SSLProxyProtocol               all -SSLv2
+        SSLProxyVerifyDepth            3
+        SSLProxyMachineCertificateFile /etc/ssl/#{clientcert}.pem
+      EOS
+    end
+
+    def proxy_pass(app, apache_ssl, clientcert, redirect_host)
+      app_name            = app['AppName']
+      tomcat_http_port    = app['tomcat_http_port']
+      tomcat_https_port   = app['tomcat_https_port']
+      redirect_app_to_ssl = app["http_redirect_to_ssl"]
+      tomcat_https_active = app["tomcat_https_active"]
+
+      target = ""
+      if apache_ssl
+        if tomcat_https_active
+          target = "https://localhost:#{tomcat_https_port}/#{app_name}"
+        else # no tomcat https available
+          target = "http://localhost:#{tomcat_http_port}/#{app_name}"
+        end
+      else # not an ssl connection to apache
+        if redirect_app_to_ssl
+          return <<-EOS
+        Redirect              /#{app_name}  https://#{redirect_host}/#{app_name}
+          EOS
+        else # non-ssl is ok
+          target = "http://localhost:#{tomcat_http_port}/#{app_name}"
+        end
+      end
+      return <<-EOS
+        ProxyPass             /#{app_name}   #{target}   retry=2
+        ProxyPassReverse      /#{app_name}   #{target}   retry=2
+      EOS
+    end
+
+    http_redirect_to_ssl = is_strictly_true?(@apache['http_redirect_to_ssl'])
+    is_http_active       = is_true?(@apache['http_active'])
+    is_http_alt_active   = is_true?(@apache['http_alt_active'])
+    is_https_active      = is_true?(@apache['https_active'])
+    
+    apps = java_apps
+    apps.each do |app|
+      app_fqdn                    = "#{app['AppName']}.#{@env}.#{@domain}"
+      app["is_http_active"]       = (is_http_active     && is_true?(app['http_active']))
+      app["is_http_alt_active"]   = (is_http_alt_active && is_strictly_true?(app['http_alt_active']))
+      app["is_https_active"]      = (is_https_active    && is_true?(app['https_active']))
+      app["fqdn"]                 = app_fqdn
+      app["http_redirect_to_ssl"] = http_redirect_to_ssl || is_strictly_true?(app['http_redirect_to_ssl'])
+      app["tomcat_http_port"]     = (app['tomcat_http_port']   or @tomcat['http_port']   or 8080)
+      app["tomcat_https_port"]    = (app['tomcat_https_port']  or @tomcat['https_port']  or 48080)
+      app["tomcat_https_active"]  = (app["is_https_active"] && is_strictly_true?(@tomcat['https_active']))
+      
+      app_has_cert = false
+      if app.has_key?('ssl')
+        app_ssl = app['ssl']
+        if app_ssl.has_key?(@env)
+          app_has_cert = true
+        end
+      end
+      if !app_has_cert && app.has_key?('serials')
+        serials = app['serials']
+        if serials.has_key?(@env)
+          app_has_cert = true
+          app['ssl'] = {}
+          app['ssl'][env] = {
+            "cert_file" => "/etc/ssl/#{app_fqdn}_cert.pem",
+            "key_file"  => "/etc/ssl/#{app_fqdn}_key.pem",
+            "ca_file"   => "/usr/share/ca-certificates/local/ca.pem"
+          }
+        end
+      end
+
+      if app["is_https_active"] && !app_has_cert
+        raise "Missing serial for secure app #{app['AppName']} in environment #{@env}"
+      end
+    end
+%>
+    ## <global>
+        ServerAdmin           <%= @apache['ServerAdmin'] %>
+
+        <Directory />
+            Options           FollowSymLinks
+            AllowOverride     None
+        </Directory>
+
+<%= docroot(@apache['DocumentRoot']) %>
+
+<%- if @apache['allow_only'] != nil -%>
+        <Proxy *>
+            Order             deny,allow
+            Deny              from all
+            Allow             from <%= @apache['allow_only'] %>
+        </Proxy>
+<%- end -%>
+    ## </global>
+
+
+# non-app-specific virtual hosting for the server itself
+#  this has to be first, so non-SNI SSL connects to the main vhost
+<%- if @apache['http_active'] == 1 -%>
+    <VirtualHost <%= @apache['http_listener'] %>>
+        ServerName            <%= @clientcert %>
+        ServerAlias           <%= @apache['ServerAlias'] %>
+<%= docroot(@apache['DocumentRoot']) %>
+        
+        <%- apps.each do |app| -%>
+<%= proxy_pass(app, false, @clientcert, @clientcert) -%>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+<%- if @apache['http_alt_active'] == 1 -%>
+    <VirtualHost <%= @apache['http_alt_listener'] %>>
+        ServerName            <%= @clientcert %>:8080
+        ServerAlias           <%= @apache['ServerAlias'] %>:8080
+<%= docroot(@apache['DocumentRoot']) %>
+        
+        <%- apps.each do |app| -%>
+<%= proxy_pass(app, false, @clientcert, @clientcert) -%>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+<%- if @apache['https_active'] == 1 -%>
+    <VirtualHost <%= @apache['https_listener'] %>>
+        ServerName            <%= @clientcert %>
+<%= docroot(@apache['DocumentRoot']) %>
+<%= ssl(@apache) %>
+        SSLCertificateFile    /etc/ssl/<%= @clientcert %>_cert.pem
+        SSLCertificateKeyFile /etc/ssl/<%= @clientcert %>_key.pem
+        SSLCACertificateFile  /usr/share/ca-certificates/local/ca.pem
+<%= ssl_proxy_settings(@clientcert) -%>
+
+        <%- apps.each do |app| -%>
+<%= proxy_pass(app, true, @clientcert, @clientcert) %>
+        <%- end -%>
+    </VirtualHost>
+<%- end -%>
+
+
+# name-based virtual hosting for java apps
+<%- apps.each do |app| -%>
+  <%
+    app_name            = app['AppName']
+    app_fqdn            = app['fqdn']
+    http_active         = app["is_http_active"]
+    http_alt_active     = app["is_http_alt_active"]
+    https_active        = app["is_https_active"]
+  -%>
+  <%- if http_active -%>
+    <VirtualHost <%= @apache['http_listener'] %>>
+        ServerName            <%= app_fqdn %>
+        <%= docroot(@apache['DocumentRoot']) %>
+        RedirectMatch         ^/$                     http://<%= app_fqdn %>/<%= app_name %>/
+        <%= proxy_pass(app, false, @clientcert, app_fqdn) %>
+    </VirtualHost>
+  <%- end -%>
+  <%- if http_alt_active -%>
+    <VirtualHost <%= @apache['http_alt_listener'] %>>
+        ServerName            <%= app_fqdn %>:8080
+<%= docroot(@apache['DocumentRoot']) %>
+        RedirectMatch         ^/$                     http://<%= app_fqdn %>/<%= app_name %>/
+<%= proxy_pass(app, false, @clientcert, app_fqdn) %>
+    </VirtualHost>
+  <%- end -%>
+  <%- if https_active -%>
+    <VirtualHost <%= @apache['https_listener'] %>>
+        ServerName            <%= app_fqdn %>:443
+<%= docroot(@apache['DocumentRoot']) %>
+<%= ssl(@apache) %>
+        SSLCertificateFile    <%= app['ssl'][@env]['cert_file'] %>
+        SSLCertificateKeyFile <%= app['ssl'][@env]['key_file'] %>
+        SSLCACertificateFile  <%= app['ssl'][@env]['ca_file'] %>
+<%= ssl_proxy_settings(@clientcert) -%>
+
+        RedirectMatch         ^/$                     https://<%= app_fqdn %>/<%= app_name %>/
+<%= proxy_pass(app, true, @clientcert, app_fqdn) %>
+    </VirtualHost>
+  <%- end -%>
+
+<%- end -%>

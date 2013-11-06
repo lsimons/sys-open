@@ -1,0 +1,23 @@
+#!/bin/bash
+# PUPPET
+
+# invokes reprepro to promote packages listed in promote/*.promote into main
+
+REPODIR=<%= repodir %>
+PROMODIR=<%= promodir %>
+CODENAME=<%= codename %>
+GNUPGHOME=<%= gnupg_dir %>
+COMPONENT=main
+
+cd ${PROMODIR}
+
+# http://stackoverflow.com/questions/2937407/test-whether-a-glob-has-any-matches-in-bash
+if test -n "$(find ${PROMODIR} -maxdepth 1 -name '*.promote' -print -quit)"; then
+  set -e
+  for i in `ls ${PROMODIR}/*.promote`; do
+      PACKAGE=$(cat $i)
+      set -e
+      reprepro --gnupghome=${GNUPGHOME} -v --waitforlock 5 -b ${REPODIR} -C ${COMPONENT} includedeb ${CODENAME} $PACKAGE 2>&1 | logger -p err -t promotedebs.sh
+      rm $i
+  done
+fi

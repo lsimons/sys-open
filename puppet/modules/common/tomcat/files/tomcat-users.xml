@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- This file is managed by puppet. Do not edit. -->
+<tomcat-users>
+    <!-- keep this file empty to disable management app access even if it is installed by accident -->
+</tomcat-users>

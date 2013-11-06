@@ -1,0 +1,125 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!-- This file is managed by puppet. Do not edit. -->
+<Server port="8005" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.core.JasperListener" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+  <GlobalNamingResources>
+    <Resource name="UserDatabase" auth="Container"
+              type="org.apache.catalina.UserDatabase"
+              description="User database that can be updated and saved"
+              factory="org.apache.catalina.users.MemoryUserDatabaseFactory"
+              pathname="conf/tomcat-users.xml" />
+  </GlobalNamingResources>
+
+  <Service name="Catalina">
+    <!-- http://tomcat.apache.org/tomcat-7.0-doc/proxy-howto.html -->
+<% java_apps.each do |app| %>
+  <% if app['manual_tomcat'] != 1 %>
+
+  <%
+    truth = [nil, 1, 'true', 'True', 'TRUE']
+    strict_truth = [1, 'true', 'True', 'TRUE']
+    
+    http_port              = (app['tomcat_http_port']   or tomcat['http_port']   or 8080)
+    https_port             = (app['tomcat_https_port']  or tomcat['https_port']  or 48080)
+    
+    apache_http_active     = truth.include?(app['http_active']) && truth.include?(apache['http_active'])
+    apache_http_alt_active = truth.include?(app['http_alt_active']) && truth.include?(apache['http_alt_active'])
+    apache_https_active    = truth.include?(app['https_active']) && truth.include?(apache['https_active'])
+    redirect_to_ssl        = strict_truth.include?(apache['http_redirect_to_ssl'])
+    
+    app_has_cert           = false
+    if app.has_key?('serials')
+      serials = app['serials']
+      if serials.has_key?(env)
+        app_has_cert       = true
+      end
+    end
+
+    https_active         = apache_https_active && strict_truth.include?(tomcat['https_active']) && \
+                           app_has_cert
+    http_active          = apache_http_active || apache_http_alt_active || \
+                           (apache_https_active && !https_active)
+
+    apache_http_port     = 80
+    if not http_active
+      apache_http_port   = 8080
+    end
+    
+    app_name = app['AppName']
+  %>
+    <% if http_active %>
+      <Connector port="<%= http_port %>" protocol="HTTP/1.1"
+                 connectionTimeout="20000"
+                 URIEncoding="UTF-8"
+                 proxyName="<%= app_name %>.<%= env %>.<%= domain %>"
+                 proxyPort="<%= apache_http_port %>" />
+    <% end %>
+    <% if https_active %>
+      <!-- http://tomcat.apache.org/tomcat-7.0-doc/config/http.html#SSL_Support -->
+      <!-- note this assumes that no client (i.e. the apache proxy) will connect
+           an originally-insecure connection to this secure port -->
+      <Connector port="<%= https_port %>" protocol="HTTP/1.1"
+                 connectionTimeout="20000"
+                 URIEncoding="UTF-8"
+                 proxyName="<%= app_name %>.<%= env %>.<%= domain %>"
+                 proxyPort="443"
+                 scheme="https"
+                 secure="true"
+                 SSLEnabled="true"
+                 ciphers="TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_256_CBC_SHA"
+                 clientAuth="true"
+                 crlFile="/usr/share/ca-certificates/local/crl.pem"
+                 keystoreFile="/etc/ssl/<%= app_name %>.<%= env %>.<%= domain %>.jks"
+                 keystoreType="JKS"
+                 keystorePass="changeit"
+                 keyPass="changeit"
+                 keyAlias="<%= app_name %>.<%= env %>.<%= domain %>"
+                 truststoreFile="/usr/share/ca-certificates/local/ca.jks"
+                 truststoreType="JKS"
+                 truststorePass="changeit"
+                 trustMaxCertLength="3"
+                 sslEnabledProtocols="TLS"
+                 sslProtocol="TLS" />
+      <!--
+          note that
+                 crlFile="/usr/share/ca-certificates/local/crl.pem"
+          may cause:
+                  http-bio-48082-exec-1, handling exception: javax.net.ssl.SSLHandshakeException:
+                  sun.security.validator.ValidatorException: PKIX path validation failed:
+                  java.security.cert.CertPathValidatorException: Could not determine revocation status
+          if the CRL is out-of-date.
+      -->
+    <% end %>
+  <% end %>
+<% end %>
+
+    <Engine name="Catalina" defaultHost="localhost">
+      <Realm className="org.apache.catalina.realm.LockOutRealm">
+        <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
+               resourceName="UserDatabase"/>
+      </Realm>
+
+      <Host name="localhost"  appBase="webapps"
+            unpackWARs="true" autoDeploy="true">
+
+<% if tomcat['enable_logging'] == 1 %>
+  <!--
+  Since it is relatively hard to get this through syslog
+      (http://marcoscorner.walther-family.org/2012/06/apache-tomcat-access-log-to-syslogd/)
+  we're not doing it at all. Just use the apache logs.
+
+        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+               prefix="localhost_access_log." suffix=".txt"
+               pattern="%h %l %u %t &quot;%r&quot; %s %b" />
+  -->
+<% end %>
+        <!-- INFRA-305: servlets get the original client ip, not 127.0.0.1 -->
+        <Valve className="org.apache.catalina.valves.RemoteIpValve"/>
+      </Host>
+    </Engine>
+  </Service>
+</Server>

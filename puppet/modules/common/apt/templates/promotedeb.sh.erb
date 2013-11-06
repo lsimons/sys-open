@@ -1,0 +1,39 @@
+#!/bin/bash
+# PUPPET
+
+# invokes reprepro to copy packages from devel onto main
+
+REPODIR=<%= repodir %>
+CODENAME=<%= codename %>
+GNUPGHOME=<%= gnupg_dir %>
+
+PACKAGE=$1
+VERSION=$2
+COMPONENT=${3:-main}
+
+function usage() {
+  echo "Usage: $0 <packagename> <packageversion> [component]"
+  exit 1
+}
+
+if [[ "x${PACKAGE}" == "x" ]]; then
+  usage
+fi
+
+if [[ "x${VERSION}" == "x" ]]; then
+  usage
+fi
+
+cd ${REPODIR}
+
+letter="${PACKAGE:0:1}"
+pattern="./pool/devel/${letter}/${PACKAGE}/${PACKAGE}_${VERSION}*.deb"
+
+# http://stackoverflow.com/questions/2937407/test-whether-a-glob-has-any-matches-in-bash
+if test -n "$(find . -path "$pattern" -print -quit)"; then
+  set -e
+  reprepro --gnupghome=${GNUPGHOME} -v --waitforlock 5 -b ${REPODIR} -C ${COMPONENT} includedeb ${CODENAME} $pattern
+else
+  echo "Cannot find package ${PACKAGE}_${VERSION} in devel" >&2
+  exit 1
+fi

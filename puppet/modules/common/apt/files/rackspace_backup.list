@@ -1,0 +1,3 @@
+# Rackspace Inc.  Cloud Backup serveragent repository.
+# deb http://agentrepo.drivesrvr.com/debian/ serveragent main
+deb [arch=amd64] http://agentrepo.drivesrvr.com/debian/ serveragent main
